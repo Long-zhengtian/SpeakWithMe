@@ -49,7 +49,7 @@ class CustomScene(BaseModel):
 class LlmSettings(BaseModel):
     provider: str = "openai"
     base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-4o-mini"
+    model: str = ""
     api_key: str = ""
     keys: Dict[str, str] = Field(default_factory=dict)
     models: Dict[str, str] = Field(default_factory=dict)
