@@ -28,6 +28,12 @@ npm run dev
 
 打开 http://localhost:5173 。
 
+## 在 GitHub 里打开
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Long-zhengtian/SpeakingWithMe)
+
+也可以在仓库页面点 **Code**，再点 **Codespaces**。云端会装好依赖，并自动打开练习页和接口。页面出来之后，到「设置」里填上 API key。密钥只留在这台云端环境里，不会写回仓库。个人账号的 Codespaces 有每月免费额度。
+
 后端测试：
 
 ```bash
@@ -38,7 +44,7 @@ pytest
 
 ## 接上模型
 
-打开主页的「设置」，选择 OpenAI、Grok、智谱 GLM、DeepSeek，或填一个兼容地址。贴上那一家的 API key 后，从该地址的 `/models` 读出模型列表，再选一个。各家的密钥分开保存，页面之后只显示末尾几位。
+打开主页的「设置」，选择 OpenAI、Grok、智谱 GLM、DeepSeek，或填一个兼容地址。贴上那一家的 API key 后，从该地址的 `/models` 读出模型列表，再选一个。每一家的地址、密钥和选过的模型分开保存。改用另一家时，之前那一家还留着，下次点回去再保存就会重新用它。页面之后只显示密钥末尾几位。
 
 开发时也可以在仓库根目录用 `.env` 提供同一把密钥：
 

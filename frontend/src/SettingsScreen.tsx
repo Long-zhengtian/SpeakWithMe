@@ -110,7 +110,7 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       <header className="home-top">
         <div>
           <h1>设置</h1>
-          <p className="lede">选一个来源，用它的地址读出模型，再从列表里挑一个。各家的密钥分开留在这台电脑上。</p>
+          <p className="lede">每一家的地址、密钥和模型都会留着。点另一家只是去看它，保存之后练习才改用那一家。</p>
         </div>
       </header>
       {error ? (
@@ -127,18 +127,25 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
               <button
                 key={item.id}
                 type="button"
-                className="source-row"
+                className={`source-row${item.id === saved.provider ? " in-use" : ""}`}
                 aria-pressed={item.id === provider}
                 data-testid={`provider-${item.id}`}
                 onClick={() => chooseProvider(item.id)}
               >
                 <strong>{item.label}</strong>
-                <span>{item.model ? item.model : item.api_key_set ? "已有密钥" : "未设置"}</span>
+                <span>{sourceStatus(item, saved.provider)}</span>
               </button>
             ))}
           </div>
           <div className="panel settings-detail">
             <h2>{selected.label}</h2>
+            <p className="muted">
+              {provider === saved.provider
+                ? "现在练习用的是这一家。其他来源已经保存的密钥和模型还在，点左边可以再选。"
+                : selected.api_key_set
+                  ? "这一家的密钥还在。保存之后练习会改用它，刚才那一家不会被清掉。"
+                  : "保存之后练习会改用这一家。其他来源已经保存的内容还在。"}
+            </p>
             {selected.custom_url ? (
               <>
                 <label htmlFor="base-url">接口地址</label>
@@ -227,4 +234,13 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       )}
     </main>
   );
+}
+
+function sourceStatus(item: LlmSettings["providers"][number], activeId: string) {
+  const using = item.id === activeId;
+  if (using && item.model) return `正在使用 · ${item.model}`;
+  if (using) return "正在使用";
+  if (item.model && item.api_key_set) return `已保存 · ${item.model}`;
+  if (item.api_key_set) return "已保存密钥";
+  return "未设置";
 }
