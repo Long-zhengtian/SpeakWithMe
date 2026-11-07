@@ -1,9 +1,10 @@
-import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api/client";
 import { categoryLabel } from "./lib/labels";
-import { canListen, startEnglishListener, type EnglishListener } from "./lib/listen";
+import { canListen, startChineseListener, startEnglishListener, type EnglishListener } from "./lib/listen";
 import { canSpeak, speak, stopSpeaking } from "./lib/speak";
 import type { ChatMessage, CoachLine, Gloss, Recap, Session } from "./types";
+import { GlossCard } from "./GlossCard";
 import { WordText } from "./WordText";
 
 type ConversationScreenProps = {
@@ -31,16 +32,12 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   const listenerRef = useRef<EnglishListener | null>(null);
   const sendingRef = useRef(false);
   const [listening, setListening] = useState(false);
+  const [intentListening, setIntentListening] = useState(false);
   const spoken = canSpeak();
   const microphone = canListen();
   const heardRef = useRef<Set<string>>(new Set());
 
   const userSpoke = messages.some((message) => message.role === "user");
-  const corrections = messages.filter((message) => message.correction);
-  const latestUser = useMemo(
-    () => [...messages].reverse().find((message) => message.role === "user"),
-    [messages],
-  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -66,10 +63,20 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     try {
       const result = await api.correct(session.id, messageId);
       setMessages((current) =>
-        current.map((item) => (item.id === messageId ? { ...item, correction: result.correction } : item)),
+        current.map((item) =>
+          item.id === messageId
+            ? {
+                ...item,
+                correction: result.correction,
+                correction_status: result.correction ? "corrected" : "clear",
+              }
+            : item,
+        ),
       );
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "指正没有看完，对话可以继续。");
+    } catch {
+      setMessages((current) =>
+        current.map((item) => (item.id === messageId ? { ...item, correction_status: "failed" } : item)),
+      );
     } finally {
       setPendingCorrectionId((current) => (current === messageId ? null : current));
     }
@@ -110,14 +117,38 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     const listener = startEnglishListener({
       onText: setDraft,
       onError: (message) => setError(message),
-      onEnd: (text) => {
+        onEnd: (text) => {
         listenerRef.current = null;
         setListening(false);
-        if (text) void sendLine(text, false);
+        if (text) setDraft(text);
       },
     });
     listenerRef.current = listener;
     if (!listener) setListening(false);
+  }
+
+  function beginIntent(event: PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    if (coachLoading || sendingRef.current || listenerRef.current) return;
+    stopSpeaking();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* 有些浏览器在这次按下时接不住指针，松开时仍会停止。 */
+    }
+    setIntentListening(true);
+    setError(null);
+    const listener = startChineseListener({
+      onText: setIntent,
+      onError: (message) => setError(message),
+      onEnd: (text) => {
+        listenerRef.current = null;
+        setIntentListening(false);
+        if (text) setIntent(text);
+      },
+    });
+    listenerRef.current = listener;
+    if (!listener) setIntentListening(false);
   }
 
   function endTalk(event: PointerEvent<HTMLButtonElement>) {
@@ -193,10 +224,6 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     }
   }
 
-  const status = session.corrections_enabled
-    ? describeLatest(latestUser, pendingCorrectionId)
-    : "这场不改句子，先把话接下去。";
-
   return (
     <main className="studio">
       <header className="studio-top">
@@ -262,6 +289,28 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                 </aside>
               ) : null}
               {pendingCorrectionId === message.id ? <p className="pending">看一下这句…</p> : null}
+              {message.role === "user" &&
+              session.corrections_enabled &&
+              !message.assisted &&
+              !message.correction &&
+              pendingCorrectionId !== message.id &&
+              message.correction_status === "clear" ? (
+                <span className="correction-ok" data-testid="correction-ok" title="这句不用改" aria-label="这句不用改">
+                  ✓
+                </span>
+              ) : null}
+              {message.role === "user" &&
+              session.corrections_enabled &&
+              !message.assisted &&
+              pendingCorrectionId !== message.id &&
+              message.correction_status === "failed" ? (
+                <p className="correction-miss" data-testid="correction-failed">
+                  模型调用失败，这句还没看完。
+                  <button type="button" className="text-button" data-testid="correction-retry" onClick={() => void requestCorrection(message.id)}>
+                    再看一次
+                  </button>
+                </p>
+              ) : null}
             </article>
           ))}
           {sending ? <p className="pending">{session.scene.partner_name} 在接话…</p> : null}
@@ -292,7 +341,8 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               id="coach-input"
               data-testid="coach-input"
               value={intent}
-              placeholder="例如：我想要一杯冰拿铁"
+              placeholder={intentListening ? "正在听…" : "例如：我想要一杯冰拿铁"}
+              readOnly={intentListening}
               onChange={(event) => setIntent(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
@@ -301,9 +351,24 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                 }
               }}
             />
-            <button className="primary" type="submit" data-testid="coach-ask" disabled={coachLoading || !intent.trim()}>
-              {coachLoading ? "在想句子…" : "告诉我怎么说"}
-            </button>
+            <div className="coach-actions">
+              {microphone ? (
+                <button
+                  type="button"
+                  className={`mic ${intentListening ? "live" : ""}`}
+                  data-testid="coach-hold"
+                  disabled={coachLoading || listening}
+                  onPointerDown={beginIntent}
+                  onPointerUp={endTalk}
+                  onPointerCancel={endTalk}
+                >
+                  {intentListening ? "正在听…" : "按住说"}
+                </button>
+              ) : null}
+              <button className="primary" type="submit" data-testid="coach-ask" disabled={coachLoading || intentListening || !intent.trim()}>
+                {coachLoading ? "在想句子…" : "告诉我怎么说"}
+              </button>
+            </div>
             {coachLine ? (
               <div className="coach-result">
                 <p className="coach-kicker">可以说</p>
@@ -357,29 +422,12 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
             ) : null}
           </form>
           {gloss ? (
-            <section className="panel" data-testid="gloss-panel">
-              <h2>{gloss.text}</h2>
-              <p>{gloss.gloss_zh}</p>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => void keep(gloss.text, gloss.gloss_zh, gloss.text.includes(" ") ? "sentence" : "word")}
-              >
-                {savedKey === `${gloss.text.includes(" ") ? "sentence" : "word"}:${gloss.text}` ? "已收下" : "收下"}
-              </button>
-            </section>
+            <GlossCard
+              gloss={gloss}
+              saved={savedKey === `word:${gloss.text}`}
+              onKeep={() => void keep(gloss.text, gloss.gloss_zh, "word")}
+            />
           ) : null}
-          <section className="panel">
-            <h2>指正</h2>
-            <p className="muted">{status}</p>
-            {corrections.length === 0 ? null : (
-              <ul className="correction-list">
-                {corrections.map((message) => (
-                  <li key={message.id}>{message.correction?.suggestion}</li>
-                ))}
-              </ul>
-            )}
-          </section>
         </aside>
         {recap ? null : (
           <form className="composer" onSubmit={onSend}>
@@ -405,7 +453,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                   type="button"
                   className={`mic ${listening ? "live" : ""}`}
                   data-testid="hold-to-talk"
-                  disabled={sending}
+                  disabled={sending || intentListening}
                   onPointerDown={beginTalk}
                   onPointerUp={endTalk}
                   onPointerCancel={endTalk}
@@ -422,17 +470,9 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
       </div>
       <p className="footnote">
         {microphone
-          ? "按住「按住说」讲英语，松开就发出去。对方的话会跟着读出来。打字也还可以用。"
+          ? "怎么说旁边按住讲中文，松开后留在框里。下面按住讲英语，松开后留在输入框，改完再点发送。"
           : "这个浏览器不能直接听你说话，先打字。对方的话会跟着读出来。"}
       </p>
     </main>
   );
-}
-
-function describeLatest(message: ChatMessage | undefined, pendingId: string | null) {
-  if (!message) return "你说完一句，值得改的地方会标在那句话下面。";
-  if (pendingId === message.id) return "正在看上一句。";
-  if (message.assisted) return "这句是借助说的，下一轮可以试着自己说。";
-  if (message.correction) return "上一句改了一处，先把对话接下去。";
-  return "上一句意思清楚，先往下聊。";
 }

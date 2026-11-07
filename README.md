@@ -66,7 +66,7 @@ LLM_COACH_MODEL=
 | 个人主页 | `GET /api/v1/profile` 汇总场次、指正和小结。记录点开后，已结束的只回顾，没结束的可以接着说 |
 | 新角色 | 在 `backend/app/agents/` 增加类，只用 `LLMProvider`，并裁剪它能看到的上下文。再在 `SessionService` 加方法、加一条 `/api/v1` 路由，把名字写进 `AGENT_SLOTS` |
 
-聊天上下文只有英语对白。中文求助留在「怎么说」接口里，不会写进对白。借助说出去的句子会标成 `assisted`，指正不会再改它。
+聊天上下文只有英语对白。中文求助留在「怎么说」接口里，不会写进对白。借助说出去的句子会标成 `assisted`，指正不会再改它。各功能实际发给模型的提示词和附带内容见 [docs/prompts.md](docs/prompts.md)。
 
 ## 第一版的接口
 
@@ -82,6 +82,7 @@ LLM_COACH_MODEL=
 - `POST /api/v1/sessions/{id}/messages/{message_id}/correction`
 - `POST /api/v1/sessions/{id}/coach`
 - `POST /api/v1/sessions/{id}/recap`
+- `POST /api/v1/sessions/{id}/fork`
 - `POST /api/v1/glossary`
 - `GET /api/v1/phrases`
 - `POST /api/v1/phrases`
@@ -93,4 +94,4 @@ LLM_COACH_MODEL=
 
 ## 还没做
 
-账号、发音评分，以及真正的语音供应商。对话里可以按住说话，用的是浏览器自己的英语识别；对方的话用浏览器朗读。服务器上的识别和合成接口还空着。模型密钥在主页的「设置」里填写，存在本机 SQLite，页面上只显示末尾几位。练习记录也在这台电脑上。
+账号、发音评分，以及真正的语音供应商。点词查的是本机 ECDICT 词典，不调用模型。对话里可以按住说话，用的是浏览器自己的英语识别；对方的话用浏览器朗读。服务器上的识别和合成接口还空着。模型密钥在主页的「设置」里填写，存在本机 SQLite，页面上只显示末尾几位。练习记录也在这台电脑上。

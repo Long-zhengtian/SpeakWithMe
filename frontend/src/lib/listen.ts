@@ -57,10 +57,29 @@ export function startEnglishListener(handlers: {
   onError: (message: string) => void;
   onEnd: (text: string) => void;
 }): EnglishListener | null {
+  return startListener("en-US", handlers);
+}
+
+export function startChineseListener(handlers: {
+  onText: (text: string) => void;
+  onError: (message: string) => void;
+  onEnd: (text: string) => void;
+}): EnglishListener | null {
+  return startListener("zh-CN", handlers);
+}
+
+function startListener(
+  lang: string,
+  handlers: {
+    onText: (text: string) => void;
+    onError: (message: string) => void;
+    onEnd: (text: string) => void;
+  },
+): EnglishListener | null {
   const Ctor = recognitionCtor();
   if (!Ctor) return null;
   const recognition = new Ctor();
-  recognition.lang = "en-US";
+  recognition.lang = lang;
   recognition.interimResults = true;
   recognition.continuous = true;
   let latest = "";

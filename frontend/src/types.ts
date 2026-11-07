@@ -53,6 +53,7 @@ export type ChatMessage = {
   text: string;
   assisted: boolean;
   correction: Correction | null;
+  correction_status?: "" | "clear" | "failed" | "corrected";
 };
 
 export type Session = {
@@ -121,6 +122,9 @@ export type PracticeRecord = {
 export type Gloss = {
   text: string;
   gloss_zh: string;
+  phonetic: string;
+  definitions: string[];
+  lemma: string;
 };
 
 export type Phrase = {

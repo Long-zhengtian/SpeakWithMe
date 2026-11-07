@@ -82,6 +82,7 @@ export function App() {
         onBack={() => leaveTo(screen.back)}
         canPractice={hasKey === true}
         onPractice={() => setScreen({ name: "setup" })}
+        onStarted={(session) => setScreen({ name: "talk", session, back: "records" })}
       />
     );
   }

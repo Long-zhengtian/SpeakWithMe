@@ -10,8 +10,8 @@ router = APIRouter()
 
 
 @router.post("/glossary", response_model=GlossPublic)
-async def glossary(body: GlossBody, container=Depends(get_container)):
-    return await container.sessions.gloss(body.text)
+def glossary(body: GlossBody, container=Depends(get_container)):
+    return container.sessions.gloss(body.text)
 
 
 @router.get("/phrases", response_model=List[Phrase])

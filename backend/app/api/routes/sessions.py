@@ -5,6 +5,7 @@ from app.api.schemas import (
     CoachBody,
     CorrectionResponse,
     CreateSessionBody,
+    ForkBody,
     SendMessageBody,
     SendMessageResponse,
     SessionPublic,
@@ -27,6 +28,12 @@ async def create_session(body: CreateSessionBody, container=Depends(get_containe
     return session_public(session)
 
 
+@router.post("/{session_id}/fork", response_model=SessionPublic)
+async def fork_session(session_id: str, body: ForkBody, container=Depends(get_container)):
+    session = await container.sessions.fork_session(session_id, body.through_message_id)
+    return session_public(session)
+
+
 @router.get("/{session_id}", response_model=SessionPublic)
 def read_session(session_id: str, container=Depends(get_container)):
     session = container.sessions.get_session(session_id)
@@ -46,8 +53,8 @@ async def send_message(session_id: str, body: SendMessageBody, container=Depends
 
 @router.post("/{session_id}/messages/{message_id}/correction", response_model=CorrectionResponse)
 async def correct_message(session_id: str, message_id: str, container=Depends(get_container)):
-    correction = await container.sessions.correct_message(session_id, message_id)
-    return CorrectionResponse(message_id=message_id, correction=correction)
+    correction, status = await container.sessions.correct_message(session_id, message_id)
+    return CorrectionResponse(message_id=message_id, correction=correction, correction_status=status)
 
 
 @router.post("/{session_id}/coach", response_model=CoachLine)

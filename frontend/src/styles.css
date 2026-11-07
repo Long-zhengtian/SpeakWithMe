@@ -187,7 +187,11 @@ legend { font-weight: 700; }
 
 .composer { grid-area: composer; padding: 14px; display: grid; gap: 8px; }
 
-.composer-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.composer-actions, .coach-actions { display: flex; gap: 8px; align-items: center; }
+
+.composer-actions { justify-content: flex-end; }
+
+.coach-actions .primary { flex: 1; }
 
 .mic {
   border-radius: 999px;
@@ -255,6 +259,29 @@ legend { font-weight: 700; }
 
 .pending { color: var(--soft); }
 
+.correction-ok {
+  justify-self: end;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: var(--green);
+  color: var(--cream);
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.correction-miss {
+  margin: 0;
+  justify-self: end;
+  color: var(--clay);
+  font-size: 0.88rem;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .coach-result { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
 
 .coach-kicker, .gloss { color: var(--soft); font-size: 0.92rem; }
@@ -280,8 +307,6 @@ textarea {
 }
 
 label { font-size: 0.92rem; }
-
-.correction-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 
 .recap { padding: 16px; display: grid; gap: 10px; background: var(--moss); }
 
@@ -439,6 +464,8 @@ label { font-size: 0.92rem; }
 .note-list span { color: var(--clay); font-size: 0.85rem; }
 
 .note-list em { color: var(--soft); font-style: normal; }
+
+.gloss-lines { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 
 .records { display: grid; gap: 10px; }
 

@@ -111,6 +111,12 @@ export const api = {
       }),
     });
   },
+  forkSession(sessionId: string, throughMessageId = "") {
+    return request<Session>(`/api/v1/sessions/${sessionId}/fork`, {
+      method: "POST",
+      body: JSON.stringify({ through_message_id: throughMessageId }),
+    });
+  },
   session(sessionId: string) {
     return request<Session>(`/api/v1/sessions/${sessionId}`);
   },
@@ -153,7 +159,7 @@ export const api = {
     );
   },
   correct(sessionId: string, messageId: string) {
-    return request<{ message_id: string; correction: Correction | null }>(
+    return request<{ message_id: string; correction: Correction | null; correction_status: string }>(
       `/api/v1/sessions/${sessionId}/messages/${messageId}/correction`,
       { method: "POST" },
     );

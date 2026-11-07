@@ -72,6 +72,7 @@ class Message(BaseModel):
     assisted: bool = False
     correction: Optional[Correction] = None
     correction_ready: bool = False
+    correction_status: str = ""
 
 
 class Session(BaseModel):

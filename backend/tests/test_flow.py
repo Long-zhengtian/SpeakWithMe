@@ -1,10 +1,13 @@
 import json
 
+import brotli
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.dictionary import LocalDictionary
 from app.domain.policy import limit_sentences
 from app.main import create_app
+from app.providers.openai_compatible import LLMError
 
 
 def test_partner_replies_are_cut_to_two_sentences():
@@ -170,6 +173,45 @@ def test_profile_keeps_practice_records_and_feedback():
     assert stored["recap"]["try_next"] == profile["latest_feedback"]["try_next"]
 
 
+def test_a_finished_session_can_start_again_from_the_opening_or_a_line():
+    client, _app = _client()
+    created = client.post("/api/v1/sessions", json={"scene_id": "coffee_shop", "level": "A1"})
+    session_id = created.json()["id"]
+    opening = created.json()["messages"][0]
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "I want coffee", "assisted": False},
+    )
+    user_line = sent.json()["user_message"]
+    client.post("/api/v1/sessions/%s/recap" % session_id)
+
+    restarted = client.post("/api/v1/sessions/%s/fork" % session_id, json={})
+    assert restarted.status_code == 200
+    assert restarted.json()["id"] != session_id
+    assert restarted.json()["finished_at"] is None
+    assert [item["text"] for item in restarted.json()["messages"]] == [opening["text"]]
+    assert client.get("/api/v1/sessions/%s" % session_id).json()["finished_at"]
+
+    continued = client.post(
+        "/api/v1/sessions/%s/fork" % session_id,
+        json={"through_message_id": user_line["id"]},
+    )
+    assert continued.status_code == 200
+    texts = [item["text"] for item in continued.json()["messages"]]
+    assert texts[0] == opening["text"]
+    assert texts[1] == "I want coffee"
+    assert continued.json()["messages"][-1]["role"] == "assistant"
+    assert continued.json()["messages"][1]["correction"] is None
+    stored = client.get("/api/v1/sessions/%s" % session_id).json()
+    assert len(stored["messages"]) == 3
+
+    missing = client.post(
+        "/api/v1/sessions/%s/fork" % session_id,
+        json={"through_message_id": "missing-line"},
+    )
+    assert missing.status_code == 404
+
+
 def test_settings_keep_the_key_on_this_machine_and_hide_it(tmp_path, monkeypatch):
     async def fake_models(base_url, api_key):
         if "bigmodel" in base_url:
@@ -307,6 +349,48 @@ def test_spoken_slips_get_one_correction_and_a_clear_line_does_not():
             assert correction["suggestion"] == suggestion
 
 
+def test_a_failed_correction_can_be_asked_again():
+    client, app = _client()
+    session_id = client.post("/api/v1/sessions", json={"scene_id": "weekend", "level": "A1"}).json()["id"]
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "I want coffee", "assisted": False},
+    )
+    message_id = sent.json()["user_message"]["id"]
+    agent = app.state.container.sessions.correction_agent
+    original = agent.review
+
+    async def fail(session, message, level):
+        raise LLMError("down")
+
+    agent.review = fail
+    failed = client.post("/api/v1/sessions/%s/messages/%s/correction" % (session_id, message_id))
+    assert failed.status_code == 502
+    assert failed.json()["detail"]["message"] == "这句指正没有看完，模型调用失败。"
+    stored = client.get("/api/v1/sessions/%s" % session_id).json()
+    user = next(item for item in stored["messages"] if item["id"] == message_id)
+    assert user["correction"] is None
+    assert user["correction_status"] == "failed"
+    agent.review = original
+    again = client.post("/api/v1/sessions/%s/messages/%s/correction" % (session_id, message_id))
+    assert again.status_code == 200
+    assert again.json()["correction_status"] in ("clear", "corrected")
+
+
+def test_a_clear_line_is_marked_clear():
+    client, _app = _client()
+    session_id = client.post("/api/v1/sessions", json={"scene_id": "weekend", "level": "A2"}).json()["id"]
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "i slept all day", "assisted": False},
+    )
+    message_id = sent.json()["user_message"]["id"]
+    corrected = client.post("/api/v1/sessions/%s/messages/%s/correction" % (session_id, message_id))
+    assert corrected.status_code == 200
+    assert corrected.json()["correction"] is None
+    assert corrected.json()["correction_status"] == "clear"
+
+
 def test_corrections_can_be_turned_off_for_a_scene():
     client, app = _client()
     created = client.post(
@@ -327,14 +411,39 @@ def test_corrections_can_be_turned_off_for_a_scene():
     assert len(app.state.container.llm.calls) == calls_before
 
 
+def test_plural_entry_keeps_the_base_meaning_ahead_of_a_rare_sense():
+    found = LocalDictionary().lookup("pictures")
+    assert found["lemma"] == "picture"
+    assert "图画" in found["definitions"][0]
+    assert any("电影院" in line for line in found["definitions"])
+
+
+def test_dictionary_folds_an_inflected_word_back_to_its_entry(tmp_path):
+    payload = {"bag": ["bæg", "n. 包"]}
+    (tmp_path / "b.json.br").write_bytes(brotli.compress(json.dumps(payload).encode()))
+    found = LocalDictionary(tmp_path).lookup("bags")
+    assert found["lemma"] == "bag"
+    assert found["gloss_zh"] == "n. 包"
+    assert found["phonetic"] == "bæg"
+
+
 def test_a_word_can_be_saved_in_the_phrase_book(tmp_path):
     settings = Settings.for_tests()
     settings.repository = "sqlite"
     settings.data_path = str(tmp_path / "speaking.sqlite")
     client = TestClient(create_app(settings))
+    calls_before = len(client.app.state.container.llm.calls)
     gloss = client.post("/api/v1/glossary", json={"text": "latte"})
     assert gloss.status_code == 200
-    assert gloss.json()["gloss_zh"] == "拿铁"
+    body = gloss.json()
+    assert "拿铁" in body["gloss_zh"]
+    assert body["phonetic"]
+    assert body["definitions"]
+    assert len(client.app.state.container.llm.calls) == calls_before
+    folded = client.post("/api/v1/glossary", json={"text": "running"})
+    assert folded.status_code == 200
+    missing = client.post("/api/v1/glossary", json={"text": "zzzznotaword"})
+    assert missing.status_code == 404
     saved = client.post(
         "/api/v1/phrases",
         json={"text": "latte", "gloss_zh": gloss.json()["gloss_zh"], "kind": "word"},

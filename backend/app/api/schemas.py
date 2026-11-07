@@ -29,6 +29,7 @@ class MessagePublic(BaseModel):
     text: str
     assisted: bool
     correction: Optional[Correction] = None
+    correction_status: str = ""
 
 
 class SessionPublic(BaseModel):
@@ -53,6 +54,10 @@ class CreateSessionBody(BaseModel):
     corrections_enabled: bool = True
 
 
+class ForkBody(BaseModel):
+    through_message_id: str = ""
+
+
 class SendMessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=800)
     assisted: bool = False
@@ -66,6 +71,7 @@ class SendMessageResponse(BaseModel):
 class CorrectionResponse(BaseModel):
     message_id: str
     correction: Optional[Correction] = None
+    correction_status: str = ""
 
 
 class CoachBody(BaseModel):
@@ -98,6 +104,7 @@ def message_public(message):
         text=message.text,
         assisted=message.assisted,
         correction=message.correction,
+        correction_status=message.correction_status,
     )
 
 
@@ -173,6 +180,9 @@ class GlossBody(BaseModel):
 class GlossPublic(BaseModel):
     text: str
     gloss_zh: str
+    phonetic: str = ""
+    definitions: List[str] = Field(default_factory=list)
+    lemma: str = ""
 
 
 class ProviderPublic(BaseModel):

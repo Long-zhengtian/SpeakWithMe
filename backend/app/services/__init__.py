@@ -1,25 +1,26 @@
 from app.agents.chat import ChatAgent
 from app.agents.coach import CoachAgent
 from app.agents.correction import CorrectionAgent
-from app.agents.gloss import GlossAgent
 from app.agents.recap import RecapAgent
+from app.dictionary import LocalDictionary
 from app.agents.scene import SceneAgent
 from app.domain.errors import AppError
 from app.domain.levels import get_level
 from app.domain.models import Message, Phrase, Session, new_id, now_iso
 from app.domain.policy import MAX_INTENT_CHARS, MAX_MESSAGE_CHARS, MAX_USER_TURNS
 from app.domain.scenes import get_scene, scene_for
+from app.providers.openai_compatible import LLMError
 
 
 class SessionService(object):
-    def __init__(self, repository, llm):
+    def __init__(self, repository, llm, dictionary=None):
         self.repository = repository
+        self.dictionary = dictionary or LocalDictionary()
         self.chat_agent = ChatAgent(llm)
         self.correction_agent = CorrectionAgent(llm)
         self.coach_agent = CoachAgent(llm)
         self.recap_agent = RecapAgent(llm)
         self.scene_agent = SceneAgent(llm)
-        self.gloss_agent = GlossAgent(llm)
 
     def _require_llm(self):
         if getattr(self.chat_agent.llm, "name", "") == "unconfigured":
@@ -31,7 +32,6 @@ class SessionService(object):
         self.coach_agent = CoachAgent(llm)
         self.recap_agent = RecapAgent(llm)
         self.scene_agent = SceneAgent(llm)
-        self.gloss_agent = GlossAgent(llm)
 
     async def create_session(self, scene_id, level_id, situation_zh, corrections_enabled):
         self._require_llm()
@@ -71,6 +71,59 @@ class SessionService(object):
             ],
         )
         return self.repository.create(session)
+
+    async def fork_session(self, session_id, through_message_id):
+        self._require_llm()
+        source = self.get_session(session_id)
+        if not source.messages:
+            raise AppError(422, "empty_session", "这场还没有可以接着说的句子。")
+        marker = (through_message_id or "").strip()
+        if marker:
+            index = next((i for i, item in enumerate(source.messages) if item.id == marker), None)
+            if index is None:
+                raise AppError(404, "message_not_found", "这场里没有这句。")
+            chosen = source.messages[: index + 1]
+        else:
+            opening = next((item for item in source.messages if item.role == "assistant"), None)
+            if opening is None:
+                raise AppError(422, "empty_session", "这场还没有可以接着说的句子。")
+            chosen = [opening]
+        copied = [self._fresh_message(item) for item in chosen]
+        session = Session(
+            id=new_id(),
+            scene_id=source.scene_id,
+            level=source.level,
+            created_at=now_iso(),
+            corrections_enabled=source.corrections_enabled,
+            custom_scene=source.custom_scene,
+            messages=copied,
+        )
+        if copied[-1].role == "user":
+            level = get_level(session.level)
+            if level is None:
+                raise AppError(500, "level_missing", "这场对话的水平丢了。")
+            reply_text = await self.chat_agent.reply(session, level)
+            session.messages = list(session.messages) + [
+                Message(
+                    id=new_id(),
+                    role="assistant",
+                    text=reply_text,
+                    assisted=False,
+                    correction=None,
+                    correction_ready=True,
+                )
+            ]
+        return self.repository.create(session)
+
+    def _fresh_message(self, message):
+        return Message(
+            id=new_id(),
+            role=message.role,
+            text=message.text,
+            assisted=message.assisted,
+            correction=None,
+            correction_ready=True,
+        )
 
     def get_session(self, session_id):
         session = self.repository.get(session_id)
@@ -126,17 +179,27 @@ class SessionService(object):
             updated = message.model_copy(update={"correction_ready": True})
             session.messages = [updated if item.id == message_id else item for item in session.messages]
             self.repository.save(session)
-            return None
+            return None, ""
         if message.correction_ready:
-            return message.correction
+            status = message.correction_status
+            if not status and message.correction is not None:
+                status = "corrected"
+            return message.correction, status
         level = get_level(session.level)
         if level is None:
             raise AppError(500, "level_missing", "这场对话的水平丢了。")
-        correction = await self.correction_agent.review(session, message, level)
-        updated = message.model_copy(update={"correction": correction, "correction_ready": True})
+        try:
+            correction = await self.correction_agent.review(session, message, level)
+        except LLMError:
+            failed = message.model_copy(update={"correction": None, "correction_ready": False, "correction_status": "failed"})
+            session.messages = [failed if item.id == message_id else item for item in session.messages]
+            self.repository.save(session)
+            raise AppError(502, "llm_unavailable", "这句指正没有看完，模型调用失败。")
+        status = "clear" if correction is None else "corrected"
+        updated = message.model_copy(update={"correction": correction, "correction_ready": True, "correction_status": status})
         session.messages = [updated if item.id == message_id else item for item in session.messages]
         self.repository.save(session)
-        return correction
+        return correction, status
 
     async def coach(self, session_id, intent_zh, variant):
         self._require_llm()
@@ -161,15 +224,16 @@ class SessionService(object):
         self.repository.save(session)
         return recap
 
-    async def gloss(self, text):
-        self._require_llm()
+    def gloss(self, text):
         cleaned = (text or "").strip()
         if not cleaned:
             raise AppError(422, "empty_text", "先点一个英语词，或留下一句。")
         if len(cleaned) > 160:
             raise AppError(422, "text_too_long", "短一点，一个词或一句就好。")
-        gloss_zh = await self.gloss_agent.define(cleaned)
-        return {"text": cleaned, "gloss_zh": gloss_zh}
+        found = self.dictionary.lookup(cleaned)
+        if found is None:
+            raise AppError(404, "word_not_found", "词典里没有这个词。")
+        return found
 
     def list_phrases(self):
         return self.repository.list_phrases()

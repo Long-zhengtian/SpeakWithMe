@@ -4,21 +4,31 @@ import { categoryLabel } from "./lib/labels";
 import { canSpeak, speak } from "./lib/speak";
 import { formatWhen } from "./lib/time";
 import type { Gloss, Session } from "./types";
+import { GlossCard } from "./GlossCard";
 import { WordText } from "./WordText";
 
 type ReviewScreenProps = {
   session: Session;
   onBack: () => void;
   onPractice: () => void;
+  onStarted: (session: Session) => void;
   canPractice: boolean;
   backLabel?: string;
 };
 
-export function ReviewScreen({ session, onBack, onPractice, canPractice, backLabel = "返回记录" }: ReviewScreenProps) {
+export function ReviewScreen({
+  session,
+  onBack,
+  onPractice,
+  onStarted,
+  canPractice,
+  backLabel = "返回记录",
+}: ReviewScreenProps) {
   const spoken = canSpeak();
   const [gloss, setGloss] = useState<Gloss | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState<string | null>(null);
 
   async function lookup(word: string) {
     setError(null);
@@ -26,6 +36,18 @@ export function ReviewScreen({ session, onBack, onPractice, canPractice, backLab
       setGloss(await api.gloss(word));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "这个词没有查到。");
+    }
+  }
+
+  async function startFrom(messageId = "") {
+    if (!canPractice || starting) return;
+    setStarting(messageId || "opening");
+    setError(null);
+    try {
+      onStarted(await api.forkSession(session.id, messageId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "这场没有重新开始。");
+      setStarting(null);
     }
   }
 
@@ -56,8 +78,17 @@ export function ReviewScreen({ session, onBack, onPractice, canPractice, backLab
           <button type="button" className="ghost" onClick={onBack}>
             {backLabel}
           </button>
-          <button type="button" className="primary" onClick={onPractice} disabled={!canPractice}>
+          <button type="button" className="ghost" onClick={onPractice} disabled={!canPractice || starting !== null}>
             再练一场
+          </button>
+          <button
+            type="button"
+            className="primary"
+            data-testid="restart-session"
+            onClick={() => void startFrom()}
+            disabled={!canPractice || starting !== null}
+          >
+            {starting === "opening" ? "正在开始…" : "重新开始"}
           </button>
         </div>
       </header>
@@ -69,13 +100,11 @@ export function ReviewScreen({ session, onBack, onPractice, canPractice, backLab
       <div className="review-layout">
         <section className="transcript">
           {gloss ? (
-            <section className="panel" data-testid="gloss-panel">
-              <h2>{gloss.text}</h2>
-              <p>{gloss.gloss_zh}</p>
-              <button type="button" className="text-button" onClick={() => void keep(gloss.text, gloss.gloss_zh, "word")}>
-                {savedKey === `word:${gloss.text}` ? "已收下" : "收下"}
-              </button>
-            </section>
+            <GlossCard
+              gloss={gloss}
+              saved={savedKey === `word:${gloss.text}`}
+              onKeep={() => void keep(gloss.text, gloss.gloss_zh, "word")}
+            />
           ) : null}
           {session.messages.map((message) => (
             <article key={message.id} className={`bubble ${message.role === "user" ? "user" : "partner"}`}>
@@ -84,6 +113,15 @@ export function ReviewScreen({ session, onBack, onPractice, canPractice, backLab
                 {message.assisted ? <em>借助</em> : null}
                 <button type="button" className="text-button" onClick={() => speak(message.text)} disabled={!spoken}>
                   听
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  data-testid={`continue-${message.id}`}
+                  onClick={() => void startFrom(message.id)}
+                  disabled={!canPractice || starting !== null}
+                >
+                  {starting === message.id ? "正在开始…" : "从这句开始"}
                 </button>
               </header>
               <WordText text={message.text} onWord={(word) => void lookup(word)} />
@@ -94,6 +132,18 @@ export function ReviewScreen({ session, onBack, onPractice, canPractice, backLab
                   <p className="correction-suggestion">{message.correction.suggestion}</p>
                   <p className="correction-why">{message.correction.explanation_zh}</p>
                 </aside>
+              ) : null}
+              {message.role === "user" &&
+              session.corrections_enabled &&
+              !message.assisted &&
+              !message.correction &&
+              message.correction_status === "clear" ? (
+                <span className="correction-ok" title="这句不用改" aria-label="这句不用改">
+                  ✓
+                </span>
+              ) : null}
+              {message.role === "user" && session.corrections_enabled && message.correction_status === "failed" ? (
+                <p className="correction-miss">模型调用失败，这句还没看完。</p>
               ) : null}
             </article>
           ))}

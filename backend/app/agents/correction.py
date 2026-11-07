@@ -39,7 +39,7 @@ class CorrectionAgent(object):
             )
         except LLMError:
             logger.warning("correction provider failed")
-            return None
+            raise
         return _coerce_correction(parse_json_object(raw), message.text)
 
 
