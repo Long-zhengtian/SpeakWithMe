@@ -344,7 +344,53 @@ label { font-size: 0.92rem; }
 
 .settings-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
-.home { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0 48px; display: grid; gap: 18px; }
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.rail-nav {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 28px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  border-right: 1px solid var(--line);
+  background: var(--paper-deep);
+}
+
+.nav-list { display: grid; gap: 4px; }
+
+.nav-item {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 2px;
+}
+
+.nav-item strong { font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+
+.nav-item span { color: var(--soft); font-size: 0.8rem; }
+
+.nav-item[aria-current="page"] { background: var(--card); }
+
+.nav-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--clay);
+  display: inline-block;
+}
+
+.shell-main { min-width: 0; }
+
+.home { width: min(880px, calc(100% - 48px)); margin: 0 auto; padding: 40px 0 64px; display: grid; gap: 18px; }
 
 .home-top { display: flex; justify-content: space-between; gap: 16px; align-items: end; }
 
@@ -437,6 +483,28 @@ label { font-size: 0.92rem; }
 
 @media (max-width: 860px) {
   h1 { font-size: 2rem; }
+  .shell { grid-template-columns: 1fr; }
+  .shell-main { padding-bottom: 76px; }
+  .rail-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    height: auto;
+    z-index: 5;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    border-right: 0;
+    border-top: 1px solid var(--line);
+    background: var(--card);
+  }
+  .rail-nav .brand { display: none; }
+  .nav-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; gap: 4px; }
+  .nav-item { text-align: center; justify-items: center; padding: 8px 4px; }
+  .nav-item span { display: none; }
   .roles, .scene-grid, .levels, .stat-row, .home-grid, .review-layout, .settings-layout { grid-template-columns: 1fr; }
   .home-top, .studio-top { flex-direction: column; align-items: start; }
   .studio-body {

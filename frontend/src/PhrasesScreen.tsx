@@ -3,11 +3,7 @@ import { ApiError, api } from "./api/client";
 import { canSpeak, speak } from "./lib/speak";
 import type { Phrase } from "./types";
 
-type PhrasesScreenProps = {
-  onBack: () => void;
-};
-
-export function PhrasesScreen({ onBack }: PhrasesScreenProps) {
+export function PhrasesScreen() {
   const [phrases, setPhrases] = useState<Phrase[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const spoken = canSpeak();
@@ -42,11 +38,7 @@ export function PhrasesScreen({ onBack }: PhrasesScreenProps) {
     <main className="home">
       <header className="home-top">
         <div>
-          <p className="brand">Speaking With Me</p>
-          <button type="button" className="text-button back-link" onClick={onBack}>
-            回到主页
-          </button>
-          <h1>句型本</h1>
+          <h1>句型</h1>
           <p className="lede">对话里点过的词，和收下的句子，都留在这里。</p>
         </div>
       </header>

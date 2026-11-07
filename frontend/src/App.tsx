@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, api } from "./api/client";
+import { AppShell, type LibraryPage } from "./AppShell";
 import { ConversationScreen } from "./ConversationScreen";
 import { HomeScreen } from "./HomeScreen";
 import { PhrasesScreen } from "./PhrasesScreen";
@@ -12,17 +13,30 @@ import type { Session } from "./types";
 type ReturnTo = "home" | "records";
 
 type Screen =
-  | { name: "home" }
-  | { name: "records" }
-  | { name: "phrases" }
-  | { name: "settings" }
+  | { name: LibraryPage }
   | { name: "setup" }
   | { name: "talk"; session: Session; back: ReturnTo }
   | { name: "review"; session: Session; back: ReturnTo };
 
 export function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home" });
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .settings()
+      .then((next) => {
+        if (alive) setHasKey(next.api_key_set);
+      })
+      .catch(() => {
+        if (alive) setHasKey(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function leaveTo(back: ReturnTo) {
     setScreen(back === "records" ? { name: "records" } : { name: "home" });
@@ -39,6 +53,10 @@ export function App() {
     }
   }
 
+  function openLibrary(page: LibraryPage) {
+    setScreen({ name: page });
+  }
+
   if (screen.name === "setup") {
     return (
       <SetupScreen
@@ -51,7 +69,7 @@ export function App() {
     return (
       <ConversationScreen
         session={screen.session}
-        exitLabel={screen.back === "records" ? "回到记录" : "回到主页"}
+        exitLabel={screen.back === "records" ? "返回记录" : "返回练习"}
         onExit={() => leaveTo(screen.back)}
       />
     );
@@ -60,35 +78,23 @@ export function App() {
     return (
       <ReviewScreen
         session={screen.session}
-        backLabel={screen.back === "records" ? "回到记录" : "回到主页"}
+        backLabel={screen.back === "records" ? "返回记录" : "返回练习"}
         onBack={() => leaveTo(screen.back)}
+        canPractice={hasKey === true}
         onPractice={() => setScreen({ name: "setup" })}
       />
     );
   }
-  if (screen.name === "phrases") {
-    return <PhrasesScreen onBack={() => setScreen({ name: "home" })} />;
-  }
-  if (screen.name === "settings") {
-    return <SettingsScreen onBack={() => setScreen({ name: "home" })} />;
-  }
-  if (screen.name === "records") {
-    return (
-      <>
-        {error ? <p className="error home-error">{error}</p> : null}
-        <RecordsScreen onBack={() => setScreen({ name: "home" })} onOpen={(id, finished) => void openRecord(id, finished)} />
-      </>
-    );
-  }
+
+  const page = screen.name;
+
   return (
-    <>
+    <AppShell page={page} needsKey={hasKey === false} onNavigate={openLibrary}>
       {error ? <p className="error home-error">{error}</p> : null}
-      <HomeScreen
-        onPractice={() => setScreen({ name: "setup" })}
-        onRecords={() => setScreen({ name: "records" })}
-        onPhrases={() => setScreen({ name: "phrases" })}
-        onSettings={() => setScreen({ name: "settings" })}
-      />
-    </>
+      {page === "records" ? <RecordsScreen onOpen={(id, finished) => void openRecord(id, finished)} /> : null}
+      {page === "phrases" ? <PhrasesScreen /> : null}
+      {page === "settings" ? <SettingsScreen onKeyChange={setHasKey} /> : null}
+      {page === "home" ? <HomeScreen hasKey={hasKey} onPractice={() => setScreen({ name: "setup" })} /> : null}
+    </AppShell>
   );
 }

@@ -4,15 +4,12 @@ import { formatWhen } from "./lib/time";
 import type { Profile } from "./types";
 
 type HomeScreenProps = {
+  hasKey: boolean | null;
   onPractice: () => void;
-  onRecords: () => void;
-  onPhrases: () => void;
-  onSettings: () => void;
 };
 
-export function HomeScreen({ onPractice, onRecords, onPhrases, onSettings }: HomeScreenProps) {
+export function HomeScreen({ hasKey, onPractice }: HomeScreenProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,14 +23,6 @@ export function HomeScreen({ onPractice, onRecords, onPhrases, onSettings }: Hom
         if (!alive) return;
         setError(err instanceof ApiError ? err.message : "练习记录没有加载出来。");
       });
-    api
-      .settings()
-      .then((next) => {
-        if (alive) setHasKey(next.api_key_set);
-      })
-      .catch(() => {
-        if (alive) setHasKey(false);
-      });
     return () => {
       alive = false;
     };
@@ -43,27 +32,18 @@ export function HomeScreen({ onPractice, onRecords, onPhrases, onSettings }: Hom
     <main className="home">
       <header className="home-top">
         <div>
-          <p className="brand">Speaking With Me</p>
-          <div className="home-links">
-            <button type="button" className="text-button back-link" data-testid="open-phrases" onClick={onPhrases}>
-              句型本
-            </button>
-            <button type="button" className="text-button back-link" data-testid="open-settings" onClick={onSettings}>
-              设置
-            </button>
-          </div>
-          <h1>我的练习</h1>
-          <p className="lede">每场对话、指正和小结都留在这台电脑上。下一场开始前，可以先看上次留下的一句。</p>
-          {hasKey === false ? <p className="lede">先填写 API key，对话、指正和怎么说都会用它。</p> : null}
+          <h1>练习</h1>
+          <p className="lede">看上一场留下的一句，然后开始下一场。模型和密钥在「设置」里。</p>
+          {hasKey === false ? <p className="lede">模型还没接上。到「设置」里选一个来源。</p> : null}
         </div>
         <button
           type="button"
           className="primary"
-          data-testid={hasKey ? "home-start" : "home-need-key"}
-          disabled={hasKey === null}
-          onClick={hasKey ? onPractice : onSettings}
+          data-testid="home-start"
+          disabled={hasKey !== true}
+          onClick={onPractice}
         >
-          {hasKey === false ? "填写密钥" : "开始一场"}
+          开始一场
         </button>
       </header>
       {error ? (
@@ -76,10 +56,10 @@ export function HomeScreen({ onPractice, onRecords, onPhrases, onSettings }: Hom
       ) : (
         <>
           <section className="stat-row" data-testid="profile-stats">
-            <button type="button" className="stat-card" data-testid="open-records" onClick={onRecords}>
+            <article data-testid="session-count">
               <strong>{profile.stats.sessions}</strong>
               <span>场练习</span>
-            </button>
+            </article>
             <article>
               <strong>{profile.stats.user_turns}</strong>
               <span>句自己说的</span>

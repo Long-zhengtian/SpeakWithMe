@@ -4,11 +4,10 @@ import { formatWhen } from "./lib/time";
 import type { PracticeRecord } from "./types";
 
 type RecordsScreenProps = {
-  onBack: () => void;
   onOpen: (sessionId: string, finished: boolean) => void;
 };
 
-export function RecordsScreen({ onBack, onOpen }: RecordsScreenProps) {
+export function RecordsScreen({ onOpen }: RecordsScreenProps) {
   const [records, setRecords] = useState<PracticeRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
@@ -33,11 +32,7 @@ export function RecordsScreen({ onBack, onOpen }: RecordsScreenProps) {
     <main className="home">
       <header className="home-top">
         <div>
-          <p className="brand">Speaking With Me</p>
-          <button type="button" className="text-button back-link" onClick={onBack}>
-            回到主页
-          </button>
-          <h1>练习记录</h1>
+          <h1>记录</h1>
           <p className="lede">
             {records ? `一共 ${records.length} 场。点开一场可以回顾，没结束的可以接着说。` : "正在整理记录…"}
           </p>

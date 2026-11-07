@@ -58,28 +58,15 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
 
   return (
     <main className="setup">
-      <p className="brand">Speaking With Me</p>
-      <button type="button" className="text-button back-link" onClick={onBack}>
-        回到主页
-      </button>
-      <h1>开口之前，先把角色分开</h1>
-      <p className="lede">
-        聊天的人只负责把话说下去。说错了，旁边标一处。不会说，就用中文问该怎么说。
-      </p>
-      <ol className="roles">
-        <li>
-          <strong>聊天</strong>
-          <span>只接话，不讲语法。</span>
-        </li>
-        <li>
-          <strong>指正</strong>
-          <span>一句最多改一处。</span>
-        </li>
-        <li>
-          <strong>怎么说</strong>
-          <span>中文进去，英语句子出来。</span>
-        </li>
-      </ol>
+      <header className="studio-top">
+        <div>
+          <h1>开一场</h1>
+          <p className="lede">选处境和水平。聊天只接话，指正在旁边，怎么说留到你问的时候。</p>
+        </div>
+        <button type="button" className="ghost" onClick={onBack}>
+          返回练习
+        </button>
+      </header>
       <form className="setup-card" onSubmit={onSubmit}>
         {error ? (
           <p className="error" role="alert">

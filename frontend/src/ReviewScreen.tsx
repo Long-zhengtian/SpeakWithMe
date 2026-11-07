@@ -10,10 +10,11 @@ type ReviewScreenProps = {
   session: Session;
   onBack: () => void;
   onPractice: () => void;
+  canPractice: boolean;
   backLabel?: string;
 };
 
-export function ReviewScreen({ session, onBack, onPractice, backLabel = "回到主页" }: ReviewScreenProps) {
+export function ReviewScreen({ session, onBack, onPractice, canPractice, backLabel = "返回记录" }: ReviewScreenProps) {
   const spoken = canSpeak();
   const [gloss, setGloss] = useState<Gloss | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function ReviewScreen({ session, onBack, onPractice, backLabel = "回到�
           <button type="button" className="ghost" onClick={onBack}>
             {backLabel}
           </button>
-          <button type="button" className="primary" onClick={onPractice}>
+          <button type="button" className="primary" onClick={onPractice} disabled={!canPractice}>
             再练一场
           </button>
         </div>

@@ -3,10 +3,10 @@ import { ApiError, api } from "./api/client";
 import type { LlmSettings } from "./types";
 
 type SettingsScreenProps = {
-  onBack: () => void;
+  onKeyChange: (apiKeySet: boolean) => void;
 };
 
-export function SettingsScreen({ onBack }: SettingsScreenProps) {
+export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
   const [saved, setSaved] = useState<LlmSettings | null>(null);
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("");
@@ -26,6 +26,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       .then((next) => {
         if (!alive) return;
         setSaved(next);
+        onKeyChange(next.api_key_set);
         setProvider(next.provider);
         setModel(next.model);
         setBaseUrl(next.base_url);
@@ -95,6 +96,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       setBaseUrl(next.base_url);
       setApiKey("");
       setClearApiKey(false);
+      onKeyChange(next.api_key_set);
       setNotice(next.api_key_set ? "已经保存。下一场对话会用这个模型和密钥。" : "这个来源的密钥已经去掉。");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "没有保存。");
@@ -107,10 +109,6 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     <main className="home">
       <header className="home-top">
         <div>
-          <p className="brand">Speaking With Me</p>
-          <button type="button" className="text-button back-link" onClick={onBack}>
-            回到主页
-          </button>
           <h1>设置</h1>
           <p className="lede">选一个来源，用它的地址读出模型，再从列表里挑一个。各家的密钥分开留在这台电脑上。</p>
         </div>
