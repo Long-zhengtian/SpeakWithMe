@@ -228,7 +228,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     <main className="studio">
       <header className="studio-top">
         <div>
-          <p className="brand">Speaking With Me</p>
+          <p className="brand">Speak With Me</p>
           <h1>
             {session.scene.title_zh}
             <span>

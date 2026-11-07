@@ -1,4 +1,4 @@
-# Speaking With Me
+# Speak With Me
 
 口语练习的第一版。一场对话里有三个分工：
 
@@ -30,7 +30,7 @@ npm run dev
 
 ## 在 GitHub 里打开
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Long-zhengtian/SpeakingWithMe)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Long-zhengtian/SpeakWithMe)
 
 也可以在仓库页面点 **Code**，再点 **Codespaces**。云端会装好依赖，并自动打开练习页和接口。页面出来之后，到「设置」里填上 API key。密钥只留在这台云端环境里，不会写回仓库。个人账号的 Codespaces 有每月免费额度。
 

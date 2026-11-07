@@ -20,7 +20,7 @@ export function AppShell({ page, needsKey, onNavigate, children }: AppShellProps
   return (
     <div className="shell">
       <nav className="rail-nav" aria-label="页面">
-        <p className="brand">Speaking With Me</p>
+        <p className="brand">Speak With Me</p>
         <div className="nav-list">
           {pages.map((item) => (
             <button

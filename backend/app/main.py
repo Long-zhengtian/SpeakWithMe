@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def create_app(settings=None):
     settings = settings or Settings.from_env()
     container = apply_stored_llm(build_container(settings))
-    app = FastAPI(title="Speaking With Me", version="0.1.0")
+    app = FastAPI(title="Speak With Me", version="0.1.0")
     app.state.container = container
     app.add_middleware(
         CORSMiddleware,
@@ -42,7 +42,7 @@ def create_app(settings=None):
     app.include_router(sessions.router, prefix="/api/v1")
     app.include_router(speech.router, prefix="/api/v1")
     logger.info(
-        "speaking-with-me ready llm=%s stt=%s tts=%s",
+        "speak-with-me ready llm=%s stt=%s tts=%s",
         container.llm.name,
         settings.stt_provider,
         settings.tts_provider,
