@@ -1,11 +1,12 @@
-import { loadKokoro, speechError, speechStatus } from "./models";
+import { readSpeech, voiceFor } from "../engine/speech";
+import { speechError, speechStatus } from "./speechNotice";
 
 type Listener = (key: string | null) => void;
+type Closable = { close: () => void };
 
 let activeKey: string | null = null;
 let generation = 0;
-let audioContext: AudioContext | null = null;
-let source: AudioBufferSourceNode | null = null;
+let current: Closable | null = null;
 const listeners = new Set<Listener>();
 
 function publish(key: string | null) {
@@ -14,7 +15,7 @@ function publish(key: string | null) {
 }
 
 export function canSpeak() {
-  return typeof window !== "undefined" && typeof AudioContext !== "undefined";
+  return typeof window !== "undefined";
 }
 
 export function subscribeSpeaking(listener: Listener) {
@@ -25,7 +26,7 @@ export function subscribeSpeaking(listener: Listener) {
   };
 }
 
-export function speak(text: string, key = "") {
+export function speak(text: string, key = "", partnerName?: string) {
   if (!canSpeak() || !text.trim()) return false;
   const token = key || text;
   if (activeKey === token) {
@@ -34,57 +35,57 @@ export function speak(text: string, key = "") {
   }
   const mine = ++generation;
   publish(token);
-  void runSpeak(text, mine, token);
+  void runSpeak(text, mine, token, partnerName);
   return true;
 }
 
-async function runSpeak(text: string, mine: number, token: string) {
+async function runSpeak(text: string, mine: number, token: string, partnerName?: string) {
   try {
     speechStatus("正在准备朗读…");
-    const voice = await loadKokoro();
+    const saved = await readSpeech();
+    if (!saved.key || !saved.endpoint) throw new Error("先在设置的语音里填上 Azure 密钥和终结点。");
+    const sdk = await import("microsoft-cognitiveservices-speech-sdk");
     if (generation !== mine) return;
-    const audio = await voice.generate(text, { voice: "af_heart", speed: 1 });
-    if (generation !== mine) return;
+    const config = sdk.SpeechConfig.fromEndpoint(new URL(saved.endpoint), saved.key);
+    config.speechSynthesisVoiceName = voiceFor(saved, partnerName);
+    const synthesizer = new sdk.SpeechSynthesizer(config);
+    current = synthesizer;
     speechStatus(null);
-    await play(audio.audio, audio.sampling_rate, mine, token);
-  } catch {
+    await new Promise<void>((resolve, reject) => {
+      synthesizer.speakTextAsync(
+        text,
+        (result) => {
+          const done = result.reason === sdk.ResultReason.SynthesizingAudioCompleted;
+          synthesizer.close();
+          if (current === synthesizer) current = null;
+          if (done) resolve();
+          else reject(new Error(result.errorDetails || "朗读没有准备好，稍后再点一次。"));
+        },
+        (error) => {
+          synthesizer.close();
+          if (current === synthesizer) current = null;
+          reject(new Error(typeof error === "string" ? error : "朗读没有准备好，稍后再点一次。"));
+        },
+      );
+    });
+    if (generation === mine && activeKey === token) publish(null);
+  } catch (error) {
     if (generation !== mine) return;
     speechStatus(null);
     publish(null);
-    speechError("朗读没有准备好，稍后再点一次。");
+    const message = error instanceof Error ? error.message : "";
+    speechError(/密钥|终结点/.test(message) ? message : "朗读没有准备好，稍后再点一次。");
   }
-}
-
-function play(samples: Float32Array, rate: number, mine: number, token: string) {
-  audioContext ??= new AudioContext();
-  const context = audioContext;
-  if (context.state === "suspended") void context.resume();
-  const buffer = context.createBuffer(1, samples.length, rate);
-  const channel = new Float32Array(samples.length);
-  channel.set(samples);
-  buffer.copyToChannel(channel, 0);
-  source?.stop();
-  const node = context.createBufferSource();
-  source = node;
-  node.buffer = buffer;
-  node.connect(context.destination);
-  return new Promise<void>((resolve) => {
-    node.onended = () => {
-      if (generation === mine && activeKey === token) publish(null);
-      resolve();
-    };
-    node.start();
-  });
 }
 
 export function stopSpeaking() {
   generation += 1;
   try {
-    source?.stop();
+    current?.close();
   } catch {
-    // The buffer may already have finished.
+    // The synthesizer may already have finished.
   }
-  source = null;
+  current = null;
   speechStatus(null);
   publish(null);
 }

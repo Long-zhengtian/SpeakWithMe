@@ -21,7 +21,7 @@ export function MessageBubble({ message, partnerName, onWord, children }: Messag
         {message.assisted ? <em data-testid="assisted-tag">借助</em> : null}
         <WordText text={message.text} onWord={onWord} />
       </div>
-      <HearButton text={message.text} speakKey={message.id} />
+      <HearButton text={message.text} speakKey={message.id} partnerName={mine ? undefined : partnerName} />
       {extra.length ? <div className="bubble-extra">{extra}</div> : null}
     </article>
   );

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "./api/client";
+import { SpeechSettings } from "./SpeechSettings";
 import type { LlmSettings } from "./types";
 
 type SettingsScreenProps = {
@@ -342,6 +343,7 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
           </div>
         </form>
       )}
+      <SpeechSettings />
       <section className="panel backup-panel">
         <h2>换设备</h2>
         <p className="muted">导出一份文件，到另一台电脑或手机上导入，练习和笔记本会按原来的日期接上。同编号的记录用文件里的版本，文件里没有的记录留在这台设备上。</p>

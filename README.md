@@ -20,7 +20,16 @@ npm run dev
 
 打开 http://localhost:5173 。第一次打开时，如果这台电脑上的旧 Python 服务还在 `8000` 端口，会把已有练习导入到浏览器自己的记录里。之后换设备用「设置」里的备份文件。
 
-听写和朗读在页面里完成，网页和安装包用同一套小模型，权重直接放在 `frontend/public/models` 里。打开就能听、就能读，不需要再下载。
+听写和朗读走设置里的语音服务。现在可用的是 Azure：填上密钥和终结点之后，网页和安装包都向这一家请求。对话用的密钥不用改。Mia 用 Jenny，Lina 用 Aria，Sam 用 Guy。
+
+本地小模型仍留在标签 `speech-local-models`。要回到那一版：
+
+```bash
+git checkout speech-local-models
+cd frontend && sh scripts/fetch-local-speech-models.sh
+```
+
+权重没有放进 git。这台电脑上如果还留着 `frontend/local-speech-models`，也可以把它拷回 `frontend/public/models`。
 
 `backend/` 是上一版网页服务。新功能写在 `frontend`。
 
@@ -53,7 +62,7 @@ cd android && ./gradlew assembleDebug --no-daemon
 
 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
 
-当前调试包是 1.1.0，大约 170MB。里面有编好的页面、`assets/public/ecdict` 词典分片、`assets/public/onnx` 运行时，以及 `assets/public/models` 里的听写和朗读模型。打开后不用再下载。
+当前调试包是 1.2.0。里面有编好的页面和 `assets/public/ecdict` 词典分片。听写和朗读的模型不在包里，使用时连 Azure。
 
 装到手机上有两种办法：
 

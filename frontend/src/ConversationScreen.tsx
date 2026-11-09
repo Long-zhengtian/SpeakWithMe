@@ -4,7 +4,7 @@ import { categoryLabel } from "./lib/labels";
 import { bindHold } from "./lib/hold";
 import { canListen, startChineseListener, startEnglishListener, type EnglishListener } from "./lib/listen";
 import { closeOverlay, useOverlay } from "./lib/overlay";
-import { subscribeSpeechNotice } from "./lib/models";
+import { subscribeSpeechNotice } from "./lib/speechNotice";
 import { speak, stopSpeaking } from "./lib/speak";
 import type { ChatMessage, CoachLine, Gloss, Recap, Session } from "./types";
 import { GlossCard } from "./GlossCard";
@@ -57,7 +57,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     const newest = [...messages].reverse().find((message) => message.role === "assistant");
     if (!newest || heardRef.current.has(newest.id) || listening) return;
     heardRef.current.add(newest.id);
-    speak(newest.text, newest.id);
+    speak(newest.text, newest.id, session.scene.partner_name);
   }, [messages, listening]);
 
   useEffect(

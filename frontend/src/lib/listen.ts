@@ -1,5 +1,5 @@
-import { recordMicrophone } from "./mic";
-import { loadTranscriber, speechError, speechStatus } from "./models";
+import { readSpeech } from "../engine/speech";
+import { speechError, speechStatus } from "./speechNotice";
 
 export type EnglishListener = {
   stop: () => void;
@@ -14,7 +14,7 @@ export function startEnglishListener(handlers: {
   onError: (message: string) => void;
   onEnd: (text: string) => void;
 }): EnglishListener | null {
-  return startListener("english", handlers);
+  return startListener("en-US", handlers);
 }
 
 export function startChineseListener(handlers: {
@@ -22,11 +22,11 @@ export function startChineseListener(handlers: {
   onError: (message: string) => void;
   onEnd: (text: string) => void;
 }): EnglishListener | null {
-  return startListener("chinese", handlers);
+  return startListener("zh-CN", handlers);
 }
 
 function startListener(
-  language: "english" | "chinese",
+  language: "en-US" | "zh-CN",
   handlers: {
     onText: (text: string) => void;
     onError: (message: string) => void;
@@ -35,69 +35,91 @@ function startListener(
 ): EnglishListener | null {
   if (!canListen()) return null;
   let closed = false;
-  const pending = recordMicrophone();
-  const model = loadTranscriber();
-  speechStatus("正在听…");
+  let released = false;
+  let stopRecognizer: (() => void) | null = null;
+  const pieces: string[] = [];
+  let partial = "";
 
-  const fail = (error: unknown) => {
+  const finish = (text: string) => {
     if (closed) return;
     closed = true;
-    const message = micMessage(error);
+    speechStatus(null);
+    handlers.onEnd(text.replace(/\s+/g, " ").trim());
+  };
+
+  const fail = (message: string) => {
+    if (closed) return;
+    closed = true;
     speechStatus(null);
     speechError(message);
     handlers.onError(message);
     handlers.onEnd("");
   };
 
-  pending.catch((error) => fail(error));
-
-  const finish = async () => {
-    if (closed) return;
+  void (async () => {
     try {
-      const recording = await pending;
-      if (closed) {
-        await recording.stop();
+      const saved = await readSpeech();
+      if (!saved.key || !saved.endpoint) {
+        fail("先在设置的语音里填上 Azure 密钥和终结点。");
         return;
       }
-      closed = true;
-      const samples = await recording.stop();
-      if (samples.length < 1600) {
-        speechStatus(null);
-        handlers.onEnd("");
-        return;
-      }
-      speechStatus("正在转写…");
-      const transcriber = await model;
-      const result = await transcriber(samples, { language, task: "transcribe", chunk_length_s: 30 });
-      const text = readTranscript(result).replace(/\s+/g, " ").trim();
-      speechStatus(null);
-      if (text) handlers.onText(text);
-      handlers.onEnd(text);
+      const sdk = await import("microsoft-cognitiveservices-speech-sdk");
+      const config = sdk.SpeechConfig.fromEndpoint(new URL(saved.endpoint), saved.key);
+      config.speechRecognitionLanguage = language;
+      const recognizer = new sdk.SpeechRecognizer(config, sdk.AudioConfig.fromDefaultMicrophoneInput());
+      recognizer.recognizing = (_sender, event) => {
+        partial = event.result.text || "";
+        handlers.onText(join(pieces, partial));
+      };
+      recognizer.recognized = (_sender, event) => {
+        if (event.result.reason !== sdk.ResultReason.RecognizedSpeech || !event.result.text) return;
+        pieces.push(event.result.text);
+        partial = "";
+        handlers.onText(join(pieces, ""));
+      };
+      recognizer.canceled = (_sender, event) => {
+        if (event.reason === sdk.CancellationReason.Error) fail(listenMessage(event.errorDetails));
+      };
+      speechStatus("正在听…");
+      await new Promise<void>((resolve, reject) => {
+        recognizer.startContinuousRecognitionAsync(resolve, (error) => reject(new Error(String(error))));
+      });
+      let stopping = false;
+      stopRecognizer = () => {
+        if (stopping) return;
+        stopping = true;
+        recognizer.stopContinuousRecognitionAsync(
+          () => {
+            recognizer.close();
+            finish(join(pieces, partial));
+          },
+          () => {
+            recognizer.close();
+            finish(join(pieces, partial));
+          },
+        );
+      };
+      if (released) stopRecognizer();
     } catch (error) {
-      closed = false;
-      fail(error);
+      fail(listenMessage(error instanceof Error ? error.message : ""));
     }
-  };
+  })();
 
   return {
     stop() {
-      void finish();
+      released = true;
+      stopRecognizer?.();
     },
   };
 }
 
-function readTranscript(result: { text?: string } | Array<{ text?: string }>) {
-  if (Array.isArray(result)) return result.map((item) => item.text ?? "").join(" ");
-  return result.text ?? "";
+function join(pieces: string[], partial: string) {
+  return [...pieces, partial].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
-function micMessage(error: unknown) {
-  const name = error instanceof DOMException ? error.name : "";
-  const text = error instanceof Error ? error.message : "";
-  if (name === "NotAllowedError" || name === "PermissionDeniedError" || /permission|not allowed/i.test(text)) {
-    return "麦克风没有打开。允许之后再按住说。";
-  }
-  if (name === "NotFoundError" || name === "NotReadableError") return "没有找到麦克风。";
-  if (/fetch|network|failed to load|not found locally|onnx/i.test(text)) return "听写没有准备好，可以先打字。";
+function listenMessage(details: string) {
+  if (/密钥|终结点/.test(details)) return details;
+  if (/permission|not allowed|denied|microphone/i.test(details)) return "麦克风没有打开。允许之后再按住说。";
+  if (/websocket|network|401|403|unavailable|endpoint/i.test(details)) return "听写暂时连不上，可以先打字。";
   return "这次没有听清，再按住说一次。";
 }

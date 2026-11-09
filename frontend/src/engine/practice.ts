@@ -13,6 +13,7 @@ import {
 import { lookupGloss } from "./dictionary";
 import { complete, completeJson } from "./llm";
 import { progressCalendar, scoreSession, categoryLabel } from "./scoring";
+import { readSpeech, writeSpeech, type SpeechSettings } from "./speech";
 import {
   cleanBaseUrl,
   cleanKey,
@@ -642,6 +643,7 @@ export const localApi = {
 
   async exportBackup() {
     const settings = await readSettings();
+    const speech = await readSpeech();
     const hasSettings = Boolean(await store.get("meta", "llm"));
     const body = {
       format: BACKUP_FORMAT,
@@ -650,6 +652,7 @@ export const localApi = {
       sessions: await sessions(),
       phrases: await store.all<StoredPhrase>("phrases"),
       settings: hasSettings ? settings : null,
+      speech: speech.key ? speech : null,
     };
     return new Blob([JSON.stringify(body)], { type: "application/json" });
   },
@@ -658,7 +661,7 @@ export const localApi = {
     if (!payload || typeof payload !== "object" || (payload as { format?: string }).format !== BACKUP_FORMAT) {
       fail(422, "bad_backup", "这不是一份练习备份。");
     }
-    const body = payload as { version?: number; sessions?: unknown; phrases?: unknown; settings?: unknown };
+    const body = payload as { version?: number; sessions?: unknown; phrases?: unknown; settings?: unknown; speech?: unknown };
     if (body.version !== BACKUP_VERSION) fail(422, "bad_backup", "这份备份的版本读不了。");
     if (!Array.isArray(body.sessions) || !Array.isArray(body.phrases)) fail(422, "bad_backup", "这份备份里有读不了的内容。");
     if (body.settings != null && (typeof body.settings !== "object" || Array.isArray(body.settings))) {
@@ -675,6 +678,9 @@ export const localApi = {
       await store.put("phrases", phrase.id, phrase);
     }
     if (body.settings) await writeSettings(body.settings as StoredSettings);
+    if (body.speech && typeof body.speech === "object" && !Array.isArray(body.speech)) {
+      await writeSpeech(body.speech as SpeechSettings);
+    }
     return { sessions: body.sessions.length, phrases: body.phrases.length, settings: Boolean(body.settings) };
   },
 };
