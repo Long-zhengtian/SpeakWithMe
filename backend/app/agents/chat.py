@@ -36,4 +36,4 @@ class ChatAgent(object):
             )
         except LLMError:
             raise AppError(502, "llm_unavailable", "聊天暂时没有接上，再试一次。")
-        return ensure_partner_english(raw, scene.clarify_en)
+        return ensure_partner_english(raw, scene.clarify_en, level.max_sentences)

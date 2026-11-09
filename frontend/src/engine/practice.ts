@@ -224,7 +224,7 @@ async function partnerReply(settings: StoredSettings, session: StoredSession) {
   } catch {
     fail(502, "llm_unavailable", "聊天暂时没有接上，再试一次。");
   }
-  return ensurePartnerEnglish(raw, scene.clarify_en);
+  return ensurePartnerEnglish(raw, scene.clarify_en, level.max_sentences);
 }
 
 function message(role: string, text: string, extra: Partial<StoredMessage> = {}): StoredMessage {

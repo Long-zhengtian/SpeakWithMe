@@ -68,11 +68,10 @@ export function App() {
     showScreen(next, mode);
   }
 
-  async function openRecord(sessionId: string, finished: boolean) {
+  async function openRecord(sessionId: string, finished: boolean, back: ReturnTo = "records") {
     setError(null);
     try {
       const session = await api.session(sessionId);
-      const back: ReturnTo = "records";
       show(finished || session.finished_at ? { name: "review", session, back } : { name: "talk", session, back }, "push");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "这场记录没有打开。");
@@ -122,7 +121,15 @@ export function App() {
       {page === "records" ? <RecordsScreen onOpen={(id, finished) => void openRecord(id, finished)} /> : null}
       {page === "phrases" ? <PhrasesScreen /> : null}
       {page === "settings" ? <SettingsScreen onKeyChange={setHasKey} /> : null}
-      {page === "home" ? <HomeScreen hasKey={hasKey} onPractice={() => show({ name: "setup" }, "push")} /> : null}
+      {page === "home" ? (
+        <HomeScreen
+          hasKey={hasKey}
+          onPractice={() => show({ name: "setup" }, "push")}
+          onResume={(id) => void openRecord(id, false, "home")}
+          onStart={(session) => show({ name: "talk", session, back: "home" }, "push")}
+          onPhrases={() => show({ name: "phrases" }, "push")}
+        />
+      ) : null}
     </AppShell>
   );
 }

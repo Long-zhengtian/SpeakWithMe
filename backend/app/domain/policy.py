@@ -31,8 +31,8 @@ def mostly_chinese(text):
     return chinese > 0 and chinese >= latin
 
 
-def ensure_partner_english(text, fallback):
-    cleaned = limit_sentences(clean_reply(text))
+def ensure_partner_english(text, fallback, max_sentences=MAX_REPLY_SENTENCES):
+    cleaned = limit_sentences(clean_reply(text), max_sentences)
     if not cleaned or mostly_chinese(cleaned):
         return fallback
     return cleaned

@@ -25,8 +25,8 @@ export function mostlyChinese(text: string) {
   return chinese > 0 && chinese >= latin;
 }
 
-export function ensurePartnerEnglish(text: string, fallback: string) {
-  const cleaned = limitSentences(cleanReply(text));
+export function ensurePartnerEnglish(text: string, fallback: string, maxSentences = MAX_REPLY_SENTENCES) {
+  const cleaned = limitSentences(cleanReply(text), maxSentences);
   if (!cleaned || mostlyChinese(cleaned)) return fallback;
   return cleaned;
 }

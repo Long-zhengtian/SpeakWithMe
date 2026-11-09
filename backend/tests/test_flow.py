@@ -12,6 +12,8 @@ from app.providers.openai_compatible import LLMError
 
 def test_partner_replies_are_cut_to_two_sentences():
     assert limit_sentences("One. Two. Three.") == "One. Two."
+    assert limit_sentences("One. Two.", 1) == "One."
+    assert limit_sentences("One. Two. Three. Four.", 3) == "One. Two. Three."
 
 
 def _client():

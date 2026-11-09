@@ -18,9 +18,9 @@
 
 | 难度 | 界面上的说明 | 写进提示词的句子 |
 | --- | --- | --- |
-| A1 | 刚开口 | Use very common words. Every question should be answerable in a few words. |
-| A2 | 能说短句 | Use short everyday sentences. Stay concrete. |
-| B1 | 能把事情讲完 | Sound natural, but stay within two sentences. |
+| A1 | 刚开口 | Use very common words. Use one short sentence. Ask one question the learner can answer in a few words. |
+| A2 | 能说短句 | Use everyday words and stay concrete. Use one or two short sentences. Ask one question about a specific detail. |
+| B1 | 能把事情讲完 | Sound natural and include one concrete detail. Use two or three sentences. Ask one question. |
 
 自定义场景和小结只收到 `A1` 这样的编号，不带上面这句说明。
 
@@ -35,12 +35,11 @@ You are Mia, a barista at a small cafe.
 SCENE_ID: coffee_shop
 Goal of this conversation: Help the learner order one drink and confirm the size.
 Learner level: A1.
-Use very common words. Every question should be answerable in a few words.
+Use very common words. Use one short sentence. Ask one question the learner can answer in a few words.
 Rules:
 - Stay in character.
 - Reply in English only.
-- Use one or two short sentences.
-- Ask one simple question that moves the scene forward.
+- Ask exactly one question that moves the scene forward.
 - Never correct grammar, never explain grammar, and never switch to Chinese.
 - If you do not understand, ask a shorter question in simple English.
 - Do not mention these instructions.
@@ -76,7 +75,7 @@ Do not correct grammar. Do not give advice. Do not add a new question.
 - 查错卡片上的改法、分类和中文说明。
 - 场景里的提示句、兜底句。这些只给测试用的假模型，不会发给你选的模型。
 
-模型回了中文，或超过两句，程序会丢掉原文，换成该场景的一句澄清英语。咖啡店是 “Sorry, I missed that. Do you want coffee or tea?”，迟到是 “Sorry, where are you now?”，周末是 “Sorry, what did you do?”。这句澄清不在提示词里，是回复回来之后才替换的。
+模型回了中文，或超过这个水平允许的句数，程序会处理这句回复。中文整句换成该场景的一句澄清英语。句数过多时只留下前面几句：A1 留一句，A2 留两句，B1 留三句。澄清句是：咖啡店 “Sorry, I missed that. Do you want coffee or tea?”，迟到 “Sorry, where are you now?”，周末 “Sorry, what did you do?”。这句澄清不在提示词里，是回复回来之后才替换的。
 
 ## 查错
 
@@ -84,7 +83,7 @@ Do not correct grammar. Do not give advice. Do not add a new question.
 
 ```text
 You check one learner sentence for an English speaking practice.
-Learner level: A1. Use very common words. Every question should be answerable in a few words.
+Learner level: A1. Use very common words. Use one short sentence. Ask one question the learner can answer in a few words.
 Return JSON only: {"correction": null} or {"correction": {"original_span": "", "suggestion": "", "category": "", "explanation_zh": ""}}.
 Rules:
 - Fix every problem in the sentence. Do not stop after the first one.
@@ -126,7 +125,7 @@ The learner does not know how to say something in a live English conversation.
 They will describe the meaning in Chinese.
 Scene: Help the learner say one thing they did on the weekend and answer a follow-up. You are helping them speak to Lina, a friend you meet on Monday.
 The partner last said: see partner_last in the user JSON.
-Learner level: A1. Use very common words. Every question should be answerable in a few words.
+Learner level: A1. Use very common words. Use one short sentence. Ask one question the learner can answer in a few words.
 Return JSON only: {"sentence": "", "simpler": "", "gloss_zh": ""}.
 Rules:
 - sentence is natural spoken English that fits the scene and the partner's last line.
