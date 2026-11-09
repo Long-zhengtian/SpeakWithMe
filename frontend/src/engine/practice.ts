@@ -4,11 +4,16 @@ import {
   correctionSystem,
   foldSystem,
   getLevel,
+  getPartner,
+  PARTNERS,
   publicScene,
+  randomSceneSystem,
   recapSystem,
+  SCENES,
   sceneFor,
   sceneSystem,
   type CustomScene,
+  type PartnerSpec,
 } from "./catalog";
 import { lookupGloss } from "./dictionary";
 import { complete, completeJson } from "./llm";
@@ -63,8 +68,10 @@ export type StoredSession = {
   created_at: string;
   updated_at: string;
   finished_at: string | null;
+  ending_at: string;
   recap: { went_well: string[]; try_next: string; keep_sentence: string; revised_from: string } | null;
   corrections_enabled: boolean;
+  partner_id: string;
   custom_scene: CustomScene | null;
   title_zh: string;
   folded_until_id: string;
@@ -83,6 +90,18 @@ type StoredPhrase = {
 
 const BACKUP_FORMAT = "speak-with-me-backup";
 const BACKUP_VERSION = 1;
+const practiceListeners = new Set<() => void>();
+
+export function subscribePractice(listener: () => void) {
+  practiceListeners.add(listener);
+  return () => {
+    practiceListeners.delete(listener);
+  };
+}
+
+function notifyPractice() {
+  practiceListeners.forEach((listener) => listener());
+}
 
 function fail(status: number, code: string, message: string): never {
   throw new EngineError(status, code, message);
@@ -93,7 +112,15 @@ async function sessions() {
   return rows.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
 }
 
-async function saveSession(session: StoredSession, touch = true) {
+async function saveSession(session: StoredSession, touch = true, releaseEnding = false) {
+  const current = await store.get<StoredSession>("sessions", session.id);
+  if (current?.finished_at && !session.finished_at) {
+    session.finished_at = current.finished_at;
+    session.recap = current.recap;
+    session.ending_at = "";
+  } else if (!releaseEnding && current?.ending_at && !session.ending_at && !session.finished_at) {
+    session.ending_at = current.ending_at;
+  }
   if (touch) session.updated_at = nowIso();
   await store.put("sessions", session.id, session);
   return session;
@@ -116,7 +143,7 @@ function publicMessage(message: StoredMessage) {
   };
 }
 
-function publicSession(session: StoredSession) {
+function publicSession(session: StoredSession, pinned = false) {
   return {
     id: session.id,
     level: session.level,
@@ -125,6 +152,9 @@ function publicSession(session: StoredSession) {
     finished_at: session.finished_at,
     recap: session.recap,
     corrections_enabled: session.corrections_enabled,
+    partner_id: session.partner_id || "",
+    pinned,
+    ending: Boolean(session.ending_at) && !session.finished_at,
   };
 }
 
@@ -132,6 +162,8 @@ async function getSession(id: string) {
   const session = await store.get<StoredSession>("sessions", id);
   if (!session) fail(404, "session_not_found", "这场对话不在记录里。");
   session.messages = session.messages || [];
+  session.ending_at = session.ending_at || "";
+  session.partner_id = session.partner_id || partnerIdFor(session);
   session.title_zh = session.title_zh || "";
   session.folded_until_id = session.folded_until_id || "";
   session.folded_summary = session.folded_summary || "";
@@ -142,6 +174,96 @@ function sceneOf(session: StoredSession) {
   const scene = sceneFor(session);
   if (!scene) fail(500, "scene_missing", "这场对话的场景丢了。");
   return scene;
+}
+
+type HomePin = {
+  id: string;
+  kind: "builtin" | "custom";
+  title_zh: string;
+  description_zh: string;
+  partner_id: string;
+  partner_name: string;
+  partner_role_zh: string;
+  scene?: CustomScene;
+};
+
+function partnerIdFor(session: { partner_id?: string; scene_id: string; custom_scene: CustomScene | null }) {
+  if (session.partner_id) return session.partner_id;
+  const scene = sceneFor(session);
+  if (scene?.partner_id) return scene.partner_id;
+  return PARTNERS.find((partner) => partner.name === scene?.partner_name)?.id || "";
+}
+
+function defaultPins(): HomePin[] {
+  return SCENES.map((scene) => ({
+    id: scene.id,
+    kind: "builtin",
+    title_zh: scene.title_zh,
+    description_zh: scene.description_zh,
+    partner_id: scene.partner_id,
+    partner_name: scene.partner_name,
+    partner_role_zh: scene.partner_role_zh,
+  }));
+}
+
+async function readPins() {
+  const stored = await store.get<HomePin[]>("meta", "home_pins");
+  if (!Array.isArray(stored)) return defaultPins();
+  return stored.filter((pin) => pin && pin.id && pin.title_zh && (pin.kind === "builtin" || pin.scene));
+}
+
+async function writePins(pins: HomePin[]) {
+  await store.put("meta", "home_pins", pins);
+  notifyPractice();
+}
+
+async function readPartners() {
+  const saved = await store.get<Record<string, string>>("meta", "partners");
+  return PARTNERS.map((partner) => {
+    const text = saved?.[partner.id];
+    const personality_zh = typeof text === "string" && text.trim() ? text.trim().slice(0, 80) : partner.personality_zh;
+    return { ...partner, personality_zh };
+  });
+}
+
+function publicPartner(partner: PartnerSpec) {
+  return { id: partner.id, name: partner.name, personality_zh: partner.personality_zh };
+}
+
+function publicPin(pin: HomePin) {
+  return {
+    id: pin.id,
+    kind: pin.kind,
+    title_zh: pin.title_zh,
+    description_zh: pin.description_zh,
+    partner_id: pin.partner_id,
+    partner_name: pin.partner_name,
+    partner_role_zh: pin.partner_role_zh,
+  };
+}
+
+async function partnerOf(session: StoredSession) {
+  const partners = await readPartners();
+  return partners.find((partner) => partner.id === session.partner_id) || null;
+}
+
+async function sessionPinned(session: StoredSession) {
+  if (!session.custom_scene) return false;
+  const pins = await readPins();
+  return pins.some((pin) => pin.kind === "custom" && pin.title_zh === session.custom_scene?.title_zh && pin.scene?.opening === session.custom_scene.opening);
+}
+
+function pinFromScene(scene: CustomScene, partner: PartnerSpec): HomePin {
+  return {
+    id: `pin_${newId()}`,
+    kind: "custom",
+    title_zh: scene.title_zh,
+    description_zh: scene.description_zh,
+    partner_id: partner.id,
+    partner_name: partner.name,
+    partner_role_zh: scene.partner_role_zh,
+    scene,
+  };
 }
 
 async function fold(settings: StoredSettings, session: StoredSession) {
@@ -209,7 +331,8 @@ async function partnerReply(settings: StoredSettings, session: StoredSession) {
   const level = getLevel(session.level);
   if (!level) fail(500, "level_missing", "这场对话的水平丢了。");
   const folded = await fold(settings, session);
-  let system = chatSystem(scene, level);
+  const partner = await partnerOf(session);
+  let system = chatSystem(scene, level, partner);
   if (folded.covered) {
     system = `${system}\nAlready talked about: ${folded.covered}\nContinue from the latest lines. Do not restart the scene.`;
   }
@@ -242,20 +365,81 @@ function message(role: string, text: string, extra: Partial<StoredMessage> = {})
 }
 
 export const localApi = {
-  catalog() {
-    return Promise.resolve({
+  async catalog() {
+    return {
       levels: [
         { id: "A1", label_zh: "A1", hint_zh: "刚开口" },
         { id: "A2", label_zh: "A2", hint_zh: "能说短句" },
         { id: "B1", label_zh: "B1", hint_zh: "能把事情讲完" },
       ],
       scenes: ["coffee_shop", "running_late", "weekend"].map((id) => publicScene({ scene_id: id, title_zh: "", custom_scene: null })),
+      partners: (await readPartners()).map(publicPartner),
+    };
+  },
+
+  async places() {
+    const pins = await readPins();
+    const pinnedIds = new Set(pins.filter((pin) => pin.kind === "builtin").map((pin) => pin.id));
+    const shelf = defaultPins().filter((pin) => !pinnedIds.has(pin.id));
+    return { pins: pins.map(publicPin), shelf: shelf.map(publicPin) };
+  },
+
+  async savePartner(partnerId: string, personalityZh: string) {
+    const partner = getPartner(partnerId);
+    if (!partner) fail(404, "partner_not_found", "没有这个对话人。");
+    const text = personalityZh.trim();
+    if (!text) fail(422, "empty_personality", "先写一句这个人是什么样的。");
+    if (text.length > 80) fail(422, "personality_too_long", "性格写短一点，80 字以内。");
+    const saved = (await store.get<Record<string, string>>("meta", "partners")) || {};
+    saved[partnerId] = text;
+    await store.put("meta", "partners", saved);
+    return publicPartner({ ...partner, personality_zh: text });
+  },
+
+  async removePlace(placeId: string) {
+    const pins = await readPins();
+    const next = pins.filter((pin) => pin.id !== placeId);
+    if (next.length === pins.length) fail(404, "place_not_found", "首页没有这场。");
+    await writePins(next);
+    return { ok: true };
+  },
+
+  async restorePlace(sceneId: string) {
+    const scene = SCENES.find((item) => item.id === sceneId);
+    if (!scene) fail(404, "scene_not_found", "没有这个场景。");
+    const pins = await readPins();
+    if (pins.some((pin) => pin.id === scene.id)) return { ok: true };
+    pins.push({
+      id: scene.id,
+      kind: "builtin",
+      title_zh: scene.title_zh,
+      description_zh: scene.description_zh,
+      partner_id: scene.partner_id,
+      partner_name: scene.partner_name,
+      partner_role_zh: scene.partner_role_zh,
     });
+    await writePins(pins);
+    return { ok: true };
+  },
+
+  async pinSession(sessionId: string) {
+    const session = await getSession(sessionId);
+    if (!session.custom_scene) fail(422, "not_custom", "固定场景用首页的放回就行。");
+    if (await sessionPinned(session)) return { ok: true };
+    const partners = await readPartners();
+    const partner = partners.find((item) => item.id === session.partner_id) || partners[0];
+    const pins = await readPins();
+    pins.push(pinFromScene(session.custom_scene, partner));
+    await writePins(pins);
+    return { ok: true };
   },
 
   async profile() {
-    const practiced = (await sessions()).filter((session) => session.messages.some((item) => item.role === "user"));
-    return buildProfile(practiced);
+    const rows = await sessions();
+    const spoke = (session: StoredSession) => session.messages.some((item) => item.role === "user");
+    const spoken = rows.filter(spoke);
+    const listed = rows.filter((session) => spoke(session) || session.custom_scene);
+    return buildProfile(spoken, listed);
   },
 
   async settings() {
@@ -349,45 +533,85 @@ export const localApi = {
     return { ok: true, message: "连上了，可以保存。" };
   },
 
-  async createSession(input: { sceneId?: string; level: string; situationZh?: string; correctionsEnabled?: boolean }) {
+  async createSession(input: {
+    sceneId?: string;
+    level: string;
+    situationZh?: string;
+    correctionsEnabled?: boolean;
+    partnerId?: string;
+    pinId?: string;
+    pin?: boolean;
+    random?: boolean;
+  }) {
     const settings = await requireModel();
-    const level = getLevel(input.level);
-    if (!level) fail(422, "invalid_level", "水平只能是目录里列出的等级。");
-    const situation = (input.situationZh || "").trim();
+    const partners = await readPartners();
+    let levelId = input.level;
+    let corrections = input.correctionsEnabled !== false;
     let custom: CustomScene | null = null;
     let sceneId = input.sceneId || "";
-    let opening = "";
-    if (situation) {
-      if (situation.length > 200) fail(422, "situation_too_long", "短一点，说清这场在什么处境就好。");
-      custom = await buildScene(settings, situation, level.id);
+    let partner = partners.find((item) => item.id === input.partnerId) || partners[0];
+    if (input.random) {
+      levelId = "B1";
+      corrections = true;
+      partner = partners[Math.floor(Math.random() * partners.length)] || partners[0];
+      const avoid = (await sessions())
+        .slice(0, 8)
+        .map((item) => item.custom_scene?.title_zh || item.title_zh)
+        .filter(Boolean);
+      custom = await buildRandomScene(settings, partner, avoid);
       sceneId = "custom";
-      opening = custom.opening;
-    } else {
-      const scene = sceneFor({ scene_id: sceneId, custom_scene: null });
-      if (!scene) fail(404, "scene_not_found", "没有这个场景。");
-      opening = scene.opening;
+    } else if (input.pinId) {
+      const pin = (await readPins()).find((item) => item.id === input.pinId);
+      if (!pin) fail(404, "place_not_found", "首页没有这场。");
+      partner = partners.find((item) => item.id === pin.partner_id) || partner;
+      if (pin.kind === "custom" && pin.scene) {
+        custom = { ...pin.scene, partner_name: partner.name };
+        sceneId = "custom";
+      } else {
+        sceneId = pin.id;
+      }
+    } else if ((input.situationZh || "").trim()) {
+      const situation = (input.situationZh || "").trim();
+      if (situation.length > 200) fail(422, "situation_too_long", "短一点，说清这场在什么处境就好。");
+      custom = await buildScene(settings, situation, levelId, partner);
+      sceneId = "custom";
     }
+    const level = getLevel(levelId);
+    if (!level) fail(422, "invalid_level", "水平只能是目录里列出的等级。");
+    const scene = sceneFor({ scene_id: sceneId, custom_scene: custom });
+    if (!scene) fail(404, "scene_not_found", "没有这个场景。");
+    if (!custom) partner = partners.find((item) => item.id === scene.partner_id) || partner;
     const session: StoredSession = {
       id: newId(),
       scene_id: sceneId,
-      level: input.level,
+      level: levelId,
       created_at: nowIso(),
       updated_at: nowIso(),
       finished_at: null,
+      ending_at: "",
       recap: null,
-      corrections_enabled: input.correctionsEnabled !== false,
+      corrections_enabled: corrections,
+      partner_id: partner.id,
       custom_scene: custom,
       title_zh: "",
       folded_until_id: "",
       folded_summary: "",
-      messages: [message("assistant", opening, { correction_ready: true })],
+      messages: [message("assistant", scene.opening, { correction_ready: true })],
     };
     await saveSession(session, false);
-    return publicSession(session);
+    let pinned = false;
+    if (input.pin && custom) {
+      const pins = await readPins();
+      pins.push(pinFromScene(custom, partner));
+      await writePins(pins);
+      pinned = true;
+    }
+    return publicSession(session, pinned);
   },
 
   async session(sessionId: string) {
-    return publicSession(await getSession(sessionId));
+    const session = await getSession(sessionId);
+    return publicSession(session, await sessionPinned(session));
   },
 
   async renameSession(sessionId: string, titleZh: string) {
@@ -410,6 +634,7 @@ export const localApi = {
   async sendMessage(sessionId: string, text: string, assisted: boolean) {
     const settings = await requireModel();
     const session = await getSession(sessionId);
+    if (session.finished_at || session.ending_at) fail(409, "session_closed", "这场正在写小结，先等它写完。");
     const cleaned = (text || "").trim();
     if (!cleaned) fail(422, "empty_message", "先写一句再发送。");
     if (cleaned.length > MAX_MESSAGE_CHARS) fail(422, "message_too_long", "这句话太长了，缩短一点。");
@@ -497,7 +722,7 @@ export const localApi = {
         settings.base_url,
         settings.api_key,
         settings.model,
-        coachSystem(scene, level),
+        coachSystem(scene, level, await partnerOf(session)),
         [{ role: "user", content: JSON.stringify({ scene_id: scene.id, level: session.level, partner_last: partnerLast, intent_zh: intent, variant }) }],
         "coach",
       );
@@ -517,6 +742,11 @@ export const localApi = {
   async recap(sessionId: string) {
     const settings = await requireModel();
     const session = await getSession(sessionId);
+    if (session.finished_at && session.recap) return session.recap;
+    if (!session.messages.some((item) => item.role === "user")) fail(422, "empty_session", "还没开口，这场不用小结。");
+    session.ending_at = session.ending_at || nowIso();
+    await saveSession(session);
+    notifyPractice();
     const folded = await fold(settings, session);
     let visible = session.messages;
     if (folded.covered && session.folded_until_id) {
@@ -549,18 +779,25 @@ export const localApi = {
         "recap",
       );
     } catch (error) {
+      const failed = await getSession(sessionId);
+      failed.ending_at = "";
+      await saveSession(failed, true, true);
+      notifyPractice();
       if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "小结暂时没有生成，再试一次。");
     }
     const went = Array.isArray(data.went_well) ? data.went_well.map((item) => String(item).trim()).filter(Boolean).slice(0, 3) : [];
-    session.recap = {
+    const finished = await getSession(sessionId);
+    finished.recap = {
       went_well: went.length ? went : ["这场对话接上了。"],
       try_next: String(data.try_next || "").trim() || "下一场继续用短句把事情说完。",
       keep_sentence: String(data.keep_sentence || "").trim(),
       revised_from: String(data.revised_from || "").trim(),
     };
-    session.finished_at = nowIso();
-    await saveSession(session);
-    return session.recap;
+    finished.finished_at = nowIso();
+    finished.ending_at = "";
+    await saveSession(finished);
+    notifyPractice();
+    return finished.recap;
   },
 
   async translate(text: string) {
@@ -650,6 +887,7 @@ export const localApi = {
       created_at: nowIso(),
       updated_at: nowIso(),
       finished_at: null,
+      ending_at: "",
       recap: null,
       folded_until_id: "",
       folded_summary: "",
@@ -675,6 +913,8 @@ export const localApi = {
       phrases: await store.all<StoredPhrase>("phrases"),
       settings: hasSettings ? settings : null,
       speech: speech.key ? speech : null,
+      partners: await store.get<Record<string, string>>("meta", "partners"),
+      home_pins: await store.get<HomePin[]>("meta", "home_pins"),
     };
     return new Blob([JSON.stringify(body)], { type: "application/json" });
   },
@@ -683,7 +923,15 @@ export const localApi = {
     if (!payload || typeof payload !== "object" || (payload as { format?: string }).format !== BACKUP_FORMAT) {
       fail(422, "bad_backup", "这不是一份练习备份。");
     }
-    const body = payload as { version?: number; sessions?: unknown; phrases?: unknown; settings?: unknown; speech?: unknown };
+    const body = payload as {
+      version?: number;
+      sessions?: unknown;
+      phrases?: unknown;
+      settings?: unknown;
+      speech?: unknown;
+      partners?: unknown;
+      home_pins?: unknown;
+    };
     if (body.version !== BACKUP_VERSION) fail(422, "bad_backup", "这份备份的版本读不了。");
     if (!Array.isArray(body.sessions) || !Array.isArray(body.phrases)) fail(422, "bad_backup", "这份备份里有读不了的内容。");
     if (body.settings != null && (typeof body.settings !== "object" || Array.isArray(body.settings))) {
@@ -703,6 +951,10 @@ export const localApi = {
     if (body.speech && typeof body.speech === "object" && !Array.isArray(body.speech)) {
       await writeSpeech(body.speech as SpeechSettings);
     }
+    if (body.partners && typeof body.partners === "object" && !Array.isArray(body.partners)) {
+      await store.put("meta", "partners", body.partners);
+    }
+    if (Array.isArray(body.home_pins)) await store.put("meta", "home_pins", body.home_pins);
     return { sessions: body.sessions.length, phrases: body.phrases.length, settings: Boolean(body.settings) };
   },
 };
@@ -743,24 +995,11 @@ async function fetchModels(base: string, key: string) {
   return listed;
 }
 
-async function buildScene(settings: StoredSettings, situation: string, levelId: string): Promise<CustomScene> {
-  let data: Record<string, unknown> = {};
-  try {
-    data = await completeJson(
-      settings.base_url,
-      settings.api_key,
-      settings.model,
-      sceneSystem(),
-      [{ role: "user", content: JSON.stringify({ situation_zh: situation, level: levelId }) }],
-      "scene",
-    );
-  } catch (error) {
-    if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "这场场景暂时没有准备好，再试一次。");
-  }
+function sceneFromModel(data: Record<string, unknown>, partner: PartnerSpec, fallback: string): CustomScene {
   return {
     title_zh: String(data.title_zh || "").trim() || "自己的一场",
-    description_zh: String(data.description_zh || "").trim() || situation,
-    partner_name: String(data.partner_name || "").trim() || "Alex",
+    description_zh: String(data.description_zh || "").trim() || fallback,
+    partner_name: partner.name,
     partner_role_zh: String(data.partner_role_zh || "").trim() || "对方",
     partner_role_en: String(data.partner_role_en || "").trim() || "the other person in this situation",
     goal_zh: String(data.goal_zh || "").trim() || "把这件事说清楚。",
@@ -769,6 +1008,62 @@ async function buildScene(settings: StoredSettings, situation: string, levelId: 
     clarify_en: String(data.clarify_en || "").trim() || "Sorry, could you say that more simply?",
     rescue_en: String(data.rescue_en || "").trim() || "Could you help me, please?",
   };
+}
+
+async function buildScene(settings: StoredSettings, situation: string, levelId: string, partner: PartnerSpec): Promise<CustomScene> {
+  let data: Record<string, unknown> = {};
+  try {
+    data = await completeJson(
+      settings.base_url,
+      settings.api_key,
+      settings.model,
+      sceneSystem(),
+      [
+        {
+          role: "user",
+          content: JSON.stringify({
+            situation_zh: situation,
+            level: levelId,
+            partner_name: partner.name,
+            personality_zh: partner.personality_zh,
+            personality_en: partner.personality_en,
+          }),
+        },
+      ],
+      "scene",
+    );
+  } catch (error) {
+    if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "这场场景暂时没有准备好，再试一次。");
+  }
+  return sceneFromModel(data, partner, situation);
+}
+
+async function buildRandomScene(settings: StoredSettings, partner: PartnerSpec, avoid: string[]): Promise<CustomScene> {
+  let data: Record<string, unknown> = {};
+  try {
+    data = await completeJson(
+      settings.base_url,
+      settings.api_key,
+      settings.model,
+      randomSceneSystem(),
+      [
+        {
+          role: "user",
+          content: JSON.stringify({
+            level: "B1",
+            partner_name: partner.name,
+            personality_zh: partner.personality_zh,
+            personality_en: partner.personality_en,
+            avoid_titles: avoid,
+          }),
+        },
+      ],
+      "scene",
+    );
+  } catch (error) {
+    if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "随机场景暂时没有准备好，再试一次。");
+  }
+  return sceneFromModel(data, partner, "随便聊一件生活里的事。");
 }
 
 function coerceCorrection(data: Record<string, unknown>, utterance: string): Correction | null {
@@ -785,7 +1080,7 @@ function coerceCorrection(data: Record<string, unknown>, utterance: string): Cor
   };
 }
 
-function buildProfile(practiced: StoredSession[]) {
+function buildProfile(practiced: StoredSession[], listed: StoredSession[] = practiced) {
   const corrections = [];
   let userTurns = 0;
   let assistedTurns = 0;
@@ -833,7 +1128,7 @@ function buildProfile(practiced: StoredSession[]) {
           revised_from: latest.recap.revised_from,
         }
       : null,
-    records: practiced.slice(0, 30).map(recordOf),
+    records: listed.slice(0, 30).map(recordOf),
     activity,
     progress: progressCalendar(practiced),
   };
@@ -842,7 +1137,7 @@ function buildProfile(practiced: StoredSession[]) {
 function recordOf(session: StoredSession) {
   const scene = publicScene(session);
   const users = session.messages.filter((message) => message.role === "user");
-  let preview = users.length ? users[users.length - 1].text : "";
+  let preview = users.length ? users[users.length - 1].text : [...session.messages].reverse().find((message) => message.role === "assistant")?.text || "";
   if (preview.length > 80) preview = `${preview.slice(0, 80)}…`;
   const score = scoreSession(session);
   return {
@@ -852,6 +1147,7 @@ function recordOf(session: StoredSession) {
     level: session.level,
     created_at: session.created_at,
     finished_at: session.finished_at,
+    ending: Boolean(session.ending_at) && !session.finished_at,
     user_turns: users.length,
     correction_count: users.filter((message) => message.correction).length,
     assisted_turns: users.filter((message) => message.assisted).length,

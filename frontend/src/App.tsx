@@ -127,7 +127,6 @@ export function App() {
           onPractice={() => show({ name: "setup" }, "push")}
           onResume={(id) => void openRecord(id, false, "home")}
           onStart={(session) => show({ name: "talk", session, back: "home" }, "push")}
-          onPhrases={() => show({ name: "phrases" }, "push")}
         />
       ) : null}
     </AppShell>

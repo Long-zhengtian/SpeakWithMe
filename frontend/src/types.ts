@@ -35,9 +35,31 @@ export type LlmSettings = {
   providers: LlmProviderSetting[];
 };
 
+export type Partner = {
+  id: string;
+  name: string;
+  personality_zh: string;
+};
+
+export type HomePlace = {
+  id: string;
+  kind: "builtin" | "custom";
+  title_zh: string;
+  description_zh: string;
+  partner_id: string;
+  partner_name: string;
+  partner_role_zh: string;
+};
+
+export type Places = {
+  pins: HomePlace[];
+  shelf: HomePlace[];
+};
+
 export type Catalog = {
   levels: LevelInfo[];
   scenes: Scene[];
+  partners: Partner[];
 };
 
 export type Correction = {
@@ -64,6 +86,9 @@ export type Session = {
   finished_at: string | null;
   recap: Recap | null;
   corrections_enabled: boolean;
+  partner_id?: string;
+  pinned?: boolean;
+  ending?: boolean;
 };
 
 export type CoachLine = {
@@ -144,6 +169,7 @@ export type PracticeRecord = {
   level: string;
   created_at: string;
   finished_at: string | null;
+  ending?: boolean;
   user_turns: number;
   correction_count: number;
   assisted_turns: number;

@@ -28,6 +28,7 @@ export function ReviewScreen({
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+  const [pinned, setPinned] = useState(Boolean(session.pinned));
 
   useOverlay(gloss !== null, () => setGloss(null));
 
@@ -80,6 +81,24 @@ export function ReviewScreen({
             </span>
           </h1>
           <p className="goal">这是一场已经记下的练习。</p>
+          {session.scene.id === "custom" && !pinned ? (
+            <button
+              type="button"
+              className="text-button"
+              disabled={starting !== null}
+              onClick={() => {
+                setStarting("pin");
+                setError(null);
+                api
+                  .pinSession(session.id)
+                  .then(() => setPinned(true))
+                  .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "没有放到首页。"))
+                  .finally(() => setStarting(null));
+              }}
+            >
+              {starting === "pin" ? "正在放上…" : "放到首页"}
+            </button>
+          ) : null}
         </div>
         <div className="top-actions">
           <button type="button" className="ghost" onClick={onBack}>
@@ -117,6 +136,9 @@ export function ReviewScreen({
                 });
               }}
             />
+          ) : null}
+          {session.scene.id === "custom" && session.scene.description_zh ? (
+            <p className="scene-brief">{session.scene.description_zh}</p>
           ) : null}
           {session.messages.map((message) => (
             <MessageBubble

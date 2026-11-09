@@ -1,4 +1,4 @@
-import { localApi } from "../engine/practice";
+import { localApi, subscribePractice } from "../engine/practice";
 import { EngineError } from "../engine/text";
 import { store } from "../engine/store";
 import type {
@@ -8,7 +8,9 @@ import type {
   Correction,
   Gloss,
   LlmSettings,
+  Partner,
   Phrase,
+  Places,
   Profile,
   Recap,
   Session,
@@ -60,8 +62,15 @@ async function call<T>(run: () => Promise<T>) {
   }
 }
 
+export { subscribePractice };
+
 export const api = {
   catalog: () => call(() => localApi.catalog() as Promise<Catalog>),
+  places: () => call(() => localApi.places() as Promise<Places>),
+  savePartner: (partnerId: string, personalityZh: string) => call(() => localApi.savePartner(partnerId, personalityZh) as Promise<Partner>),
+  removePlace: (placeId: string) => call(() => localApi.removePlace(placeId)),
+  restorePlace: (sceneId: string) => call(() => localApi.restorePlace(sceneId)),
+  pinSession: (sessionId: string) => call(() => localApi.pinSession(sessionId)),
   profile: () => call(() => localApi.profile() as Promise<Profile>),
   settings: () => call(() => localApi.settings() as Promise<LlmSettings>),
   saveSettings: (input: { provider: string; baseUrl: string; model: string; apiKey: string; clearApiKey: boolean }) =>
@@ -74,8 +83,16 @@ export const api = {
   session: (sessionId: string) => call(() => localApi.session(sessionId) as Promise<Session>),
   renameSession: (sessionId: string, titleZh: string) => call(() => localApi.renameSession(sessionId, titleZh) as Promise<Session>),
   deleteSession: (sessionId: string) => call(() => localApi.deleteSession(sessionId)),
-  createSession: (input: { sceneId?: string; level: string; situationZh?: string; correctionsEnabled?: boolean }) =>
-    call(() => localApi.createSession(input) as Promise<Session>),
+  createSession: (input: {
+    sceneId?: string;
+    level: string;
+    situationZh?: string;
+    correctionsEnabled?: boolean;
+    partnerId?: string;
+    pinId?: string;
+    pin?: boolean;
+    random?: boolean;
+  }) => call(() => localApi.createSession(input) as Promise<Session>),
   gloss: (text: string) => call(() => localApi.gloss(text) as Promise<Gloss>),
   translate: (text: string) => call(() => localApi.translate(text) as Promise<string>),
   phrases: () => call(() => localApi.phrases() as Promise<Phrase[]>),

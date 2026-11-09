@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ApiError, api } from "./api/client";
+import { ApiError, api, subscribePractice } from "./api/client";
 import { categoryLabel } from "./lib/labels";
 import { bindHold } from "./lib/hold";
 import { canListen, startChineseListener, startEnglishListener, type EnglishListener } from "./lib/listen";
@@ -48,7 +48,9 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   const [coachLoading, setCoachLoading] = useState(false);
   const [sendingLine, setSendingLine] = useState<string | null>(null);
   const [recap, setRecap] = useState<Recap | null>(null);
-  const [recapLoading, setRecapLoading] = useState(false);
+  const [pinned, setPinned] = useState(Boolean(session.pinned));
+  const [pinning, setPinning] = useState(false);
+  const [recapLoading, setRecapLoading] = useState(Boolean(session.ending));
   const [gloss, setGloss] = useState<Gloss | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -71,6 +73,31 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   const heardReady = useRef(false);
 
   const userSpoke = messages.some((message) => message.role === "user");
+
+  useEffect(() => {
+    if (!session.ending) return;
+    let alive = true;
+    async function refresh() {
+      try {
+        const next = await api.session(session.id);
+        if (!alive) return;
+        if (next.recap) {
+          setRecap(next.recap);
+          setRecapLoading(false);
+        } else if (!next.ending) {
+          setRecapLoading(false);
+        }
+      } catch {
+        /* The summary is still being written. */
+      }
+    }
+    void refresh();
+    const stop = subscribePractice(() => void refresh());
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [session.ending, session.id]);
 
   useEffect(() => {
     const scroller = bottomRef.current?.parentElement;
@@ -180,7 +207,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
 
   async function sendLine(text: string, assisted: boolean) {
     const cleaned = text.trim();
-    if (!cleaned || sendingRef.current) return;
+    if (!cleaned || sendingRef.current || recapLoading) return;
     sendingRef.current = true;
     setSending(true);
     setError(null);
@@ -291,6 +318,20 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     await sendLine(text, true);
   }
 
+  async function pinHere() {
+    if (pinned || pinning) return;
+    setPinning(true);
+    setError(null);
+    try {
+      await api.pinSession(session.id);
+      setPinned(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "没有放到首页。");
+    } finally {
+      setPinning(false);
+    }
+  }
+
   async function endScene() {
     if (!userSpoke || recapLoading) return;
     setRecapLoading(true);
@@ -339,6 +380,11 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               {session.scene.partner_name} · {session.scene.partner_role_zh} · {session.level}
             </span>
           </h1>
+          {session.scene.id === "custom" && !pinned ? (
+            <button type="button" className="text-button talk-pin" disabled={pinning} onClick={() => void pinHere()}>
+              {pinning ? "正在放上…" : "放到首页"}
+            </button>
+          ) : null}
         </div>
         <button
           type="button"
@@ -350,6 +396,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
           {recapLoading ? "在写小结…" : "结束这场"}
         </button>
       </header>
+      {recapLoading ? <p className="pending">小结还在写。回到记录也会继续。</p> : null}
       {status ? <p className="pending">{status}</p> : null}
       {error ? (
         <p className="error" role="alert">
@@ -358,6 +405,9 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
       ) : null}
       <div className="studio-body">
         <section className="transcript" aria-live="polite">
+          {session.scene.id === "custom" && session.scene.description_zh ? (
+            <p className="scene-brief">{session.scene.description_zh}</p>
+          ) : null}
           {messages.map((message) => (
             <MessageBubble
               key={message.id}
@@ -581,7 +631,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                 ref={talkHoldRef}
                 className={`hold-bar ${listening ? "live" : ""}`}
                 data-testid="hold-to-talk"
-                disabled={sending || intentListening}
+                disabled={sending || intentListening || recapLoading}
               >
                 {listening ? "松开 结束" : "按住 说话"}
               </button>
@@ -594,7 +644,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                 value={draft}
                 aria-label="英语"
                 placeholder="英语"
-                disabled={sending}
+                disabled={sending || recapLoading}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -605,11 +655,11 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               />
             )}
             {inputMode === "text" && draft.trim() ? (
-              <button className="primary composer-send" type="submit" data-testid="send-message" disabled={sending}>
+              <button className="primary composer-send" type="submit" data-testid="send-message" disabled={sending || recapLoading}>
                 发送
               </button>
             ) : null}
-            <button type="button" className="composer-chip coach-open" onClick={() => setCoachOpen(true)}>
+            <button type="button" className="composer-chip coach-open" disabled={recapLoading} onClick={() => setCoachOpen(true)}>
               怎么说
             </button>
             </div>

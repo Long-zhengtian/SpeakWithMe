@@ -95,6 +95,8 @@ def scene_system():
             "Rules:",
             "- title_zh and description_zh and partner_role_zh and goal_zh are Chinese.",
             "- partner_role_en, goal_en, opening, clarify_en, and rescue_en are English.",
+            "- If partner_name is given, use that exact name.",
+            "- Fit the role to this situation. Do not keep a job from another scene.",
             "- opening is one short English line the partner says first.",
             "- rescue_en is one simple English sentence the learner could say.",
             "- Do not put Chinese inside the English fields.",

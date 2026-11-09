@@ -62,7 +62,7 @@ cd android && ./gradlew assembleDebug --no-daemon
 
 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
 
-当前调试包是 1.3.1。里面有编好的页面和 `assets/public/ecdict` 词典分片。听写和朗读的模型不在包里，使用时连 Azure。
+当前调试包是 1.4.2。里面有编好的页面和 `assets/public/ecdict` 词典分片。听写和朗读的模型不在包里，使用时连 Azure。
 
 装到手机上有两种办法：
 

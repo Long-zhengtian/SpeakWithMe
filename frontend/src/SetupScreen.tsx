@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ApiError, api } from "./api/client";
-import type { Catalog, Session } from "./types";
+import type { Catalog, Partner, Session } from "./types";
 
 type SetupScreenProps = {
   onStart: (session: Session) => void;
@@ -9,9 +9,11 @@ type SetupScreenProps = {
 
 export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [sceneId, setSceneId] = useState("");
+  const [partnerId, setPartnerId] = useState("");
+  const [personality, setPersonality] = useState("");
   const [levelId, setLevelId] = useState("");
   const [situation, setSituation] = useState("");
+  const [pinHome, setPinHome] = useState(false);
   const [correctionsEnabled, setCorrectionsEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -23,7 +25,9 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
       .then((next) => {
         if (!alive) return;
         setCatalog(next);
-        setSceneId(next.scenes[0]?.id ?? "");
+        const first = next.partners[0];
+        setPartnerId(first?.id ?? "");
+        setPersonality(first?.personality_zh ?? "");
         setLevelId(next.levels[0]?.id ?? "");
       })
       .catch((err: unknown) => {
@@ -35,18 +39,46 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
     };
   }, []);
 
+  function choosePartner(partner: Partner) {
+    setPartnerId(partner.id);
+    setPersonality(partner.personality_zh);
+  }
+
+  async function keepPersonality() {
+    const partner = catalog?.partners.find((item) => item.id === partnerId);
+    const text = personality.trim();
+    if (!partner) return;
+    if (!text) {
+      setPersonality(partner.personality_zh);
+      return;
+    }
+    if (text === partner.personality_zh) return;
+    try {
+      const saved = await api.savePartner(partner.id, text);
+      setCatalog((current) =>
+        current
+          ? { ...current, partners: current.partners.map((item) => (item.id === saved.id ? saved : item)) }
+          : current,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "性格没有记下。");
+    }
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     const custom = situation.trim();
-    if ((!custom && !sceneId) || !levelId || pending) return;
+    if (!custom || !partnerId || !levelId || pending) return;
     setPending(true);
     setError(null);
     try {
+      if (personality.trim()) await keepPersonality();
       onStart(
         await api.createSession({
-          sceneId: custom ? "" : sceneId,
           level: levelId,
           situationZh: custom,
+          partnerId,
+          pin: pinHome,
           correctionsEnabled,
         }),
       );
@@ -55,6 +87,8 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
       setPending(false);
     }
   }
+
+  const selected = catalog?.partners.find((item) => item.id === partnerId);
 
   return (
     <main className="setup">
@@ -77,30 +111,35 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
         ) : (
           <>
             <fieldset>
-              <legend>这场聊什么</legend>
-              <div className="scene-grid">
-                {catalog.scenes.map((scene) => (
+              <legend>和谁说</legend>
+              <div className="levels">
+                {catalog.partners.map((partner) => (
                   <button
-                    key={scene.id}
+                    key={partner.id}
                     type="button"
-                    className="scene-card"
-                    aria-pressed={!situation.trim() && scene.id === sceneId}
-                    data-testid={`scene-${scene.id}`}
-                    onClick={() => {
-                      setSceneId(scene.id);
-                      setSituation("");
-                    }}
+                    className="level"
+                    aria-pressed={partner.id === partnerId}
+                    onClick={() => choosePartner(partner)}
                   >
-                    <span className="scene-kicker">
-                      {scene.partner_name} · {scene.partner_role_zh}
-                    </span>
-                    <strong>{scene.title_zh}</strong>
-                    <span>{scene.description_zh}</span>
+                    <strong>{partner.name}</strong>
+                    <span>{partner.personality_zh}</span>
                   </button>
                 ))}
               </div>
             </fieldset>
-            <label htmlFor="custom-situation">或者自己说这场在哪</label>
+            {selected ? (
+              <label className="personality-field">
+                {selected.name} 的性格
+                <textarea
+                  value={personality}
+                  maxLength={80}
+                  aria-label={`${selected.name} 的性格`}
+                  onChange={(event) => setPersonality(event.target.value)}
+                  onBlur={() => void keepPersonality()}
+                />
+              </label>
+            ) : null}
+            <label htmlFor="custom-situation">这场在哪</label>
             <textarea
               id="custom-situation"
               data-testid="custom-situation"
@@ -108,15 +147,14 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
               placeholder="例如：我在机场找丢失的行李"
               onChange={(event) => setSituation(event.target.value)}
             />
+            <label className="pin-choice">
+              <input type="checkbox" checked={pinHome} onChange={(event) => setPinHome(event.target.checked)} />
+              放到首页
+            </label>
             <fieldset>
               <legend>指正</legend>
               <div className="levels">
-                <button
-                  type="button"
-                  className="level"
-                  aria-pressed={correctionsEnabled}
-                  onClick={() => setCorrectionsEnabled(true)}
-                >
+                <button type="button" className="level" aria-pressed={correctionsEnabled} onClick={() => setCorrectionsEnabled(true)}>
                   <strong>正常</strong>
                   <span>每句都改成完整的一句。</span>
                 </button>
@@ -150,8 +188,8 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
                 ))}
               </div>
             </fieldset>
-            <button className="primary" type="submit" data-testid="start-session" disabled={pending}>
-              {pending ? "正在进店…" : "开始这场"}
+            <button className="primary" type="submit" data-testid="start-session" disabled={pending || !situation.trim()}>
+              {pending ? "正在准备…" : "开始这场"}
             </button>
           </>
         )}

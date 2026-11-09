@@ -1,10 +1,43 @@
 export type LevelSpec = { id: string; label_zh: string; hint_zh: string; guide_en: string; max_sentences: number };
 
+export type PartnerSpec = {
+  id: string;
+  name: string;
+  personality_zh: string;
+  personality_en: string;
+};
+
+export const PARTNERS: PartnerSpec[] = [
+  {
+    id: "mia",
+    name: "Mia",
+    personality_zh: "温和、耐心，说话短，像在接待客人。",
+    personality_en: "Warm and patient. Keep lines short, like someone welcoming a guest.",
+  },
+  {
+    id: "sam",
+    name: "Sam",
+    personality_zh: "直接，稍微着急，像同学在等你。",
+    personality_en: "Direct and a little hurried, like a classmate who is waiting.",
+  },
+  {
+    id: "lina",
+    name: "Lina",
+    personality_zh: "随意、爱追问，像朋友闲聊。",
+    personality_en: "Easygoing and curious, like a friend making small talk.",
+  },
+];
+
+export function getPartner(id: string) {
+  return PARTNERS.find((partner) => partner.id === id);
+}
+
 export type SceneSpec = {
   id: string;
   title: string;
   title_zh: string;
   description_zh: string;
+  partner_id: string;
   partner_name: string;
   partner_role_zh: string;
   partner_role_en: string;
@@ -27,6 +60,7 @@ export const SCENES: SceneSpec[] = [
     title: "Coffee order",
     title_zh: "咖啡店点单",
     description_zh: "向店员点一杯喝的，把尺寸和冷热说清楚。",
+    partner_id: "mia",
     partner_name: "Mia",
     partner_role_zh: "咖啡店员",
     partner_role_en: "a barista at a small cafe",
@@ -41,6 +75,7 @@ export const SCENES: SceneSpec[] = [
     title: "Running late",
     title_zh: "上课要迟到",
     description_zh: "告诉同学你为什么还没到，以及大概还要多久。",
+    partner_id: "sam",
     partner_name: "Sam",
     partner_role_zh: "同学",
     partner_role_en: "a classmate waiting at the classroom door",
@@ -55,6 +90,7 @@ export const SCENES: SceneSpec[] = [
     title: "Weekend chat",
     title_zh: "聊聊周末",
     description_zh: "用几句简单的话告诉朋友周末做了什么。",
+    partner_id: "lina",
     partner_name: "Lina",
     partner_role_zh: "朋友",
     partner_role_en: "a friend you meet on Monday",
@@ -92,6 +128,7 @@ export function sceneFor(session: { scene_id: string; custom_scene: CustomScene 
     const custom = session.custom_scene;
     return {
       id: "custom",
+      partner_id: "",
       title: custom.title_zh,
       title_zh: custom.title_zh,
       description_zh: custom.description_zh,
@@ -135,13 +172,23 @@ export function publicScene(session: { scene_id: string; title_zh: string; custo
   };
 }
 
-export function chatSystem(scene: SceneSpec, level: LevelSpec) {
+export function personalityLines(partner?: { personality_zh: string; personality_en: string } | null) {
+  if (!partner) return [];
+  return [
+    `Personality: ${partner.personality_en}`,
+    `The learner describes this person in Chinese: ${partner.personality_zh}`,
+    "Follow that personality. If the two descriptions differ, follow the Chinese one.",
+  ];
+}
+
+export function chatSystem(scene: SceneSpec, level: LevelSpec, partner?: { personality_zh: string; personality_en: string } | null) {
   return [
     `You are ${scene.partner_name}, ${scene.partner_role_en}.`,
     `SCENE_ID: ${scene.id}`,
     `Goal of this conversation: ${scene.goal_en}`,
     `Learner level: ${level.id}.`,
     level.guide_en,
+    ...personalityLines(partner),
     "Rules:",
     "- Stay in character.",
     "- Reply in English only.",
@@ -170,11 +217,12 @@ export function correctionSystem(level: LevelSpec) {
   ].join("\n");
 }
 
-export function coachSystem(scene: SceneSpec, level: LevelSpec) {
+export function coachSystem(scene: SceneSpec, level: LevelSpec, partner?: { personality_zh: string; personality_en: string } | null) {
   return [
     "The learner does not know how to say something in a live English conversation.",
     "They will describe the meaning in Chinese.",
     `Scene: ${scene.goal_en}. You are helping them speak to ${scene.partner_name}, ${scene.partner_role_en}.`,
+    ...personalityLines(partner),
     "The partner last said: see partner_last in the user JSON.",
     `Learner level: ${level.id}. ${level.guide_en}`,
     'Return JSON only: {"sentence": "", "simpler": "", "gloss_zh": ""}.',
@@ -220,8 +268,29 @@ export function sceneSystem() {
     "Rules:",
     "- title_zh and description_zh and partner_role_zh and goal_zh are Chinese.",
     "- partner_role_en, goal_en, opening, clarify_en, and rescue_en are English.",
+    "- If partner_name is given, use that exact name.",
+    "- Fit the role to this situation. Do not keep a job from another scene.",
     "- opening is one short English line the partner says first.",
     "- rescue_en is one simple English sentence the learner could say.",
     "- Do not put Chinese inside the English fields.",
+  ].join("\n");
+}
+
+export function randomSceneSystem() {
+  return [
+    "Invent one spoken-English role play for everyday practice.",
+    "The situation must be ordinary life, ordinary work, or casual chat.",
+    "Good kinds: ordering food, a shop, the bus, asking the way, a restaurant, a pharmacy, a short talk with a coworker, weekend plans, the weather, cooking, the gym, a neighbor.",
+    "Do not use rare, technical, academic, legal, medical, or dramatic situations.",
+    'Return JSON only: {"title_zh": "", "description_zh": "", "partner_role_zh": "", "partner_role_en": "", "goal_zh": "", "goal_en": "", "opening": "", "clarify_en": "", "rescue_en": ""}.',
+    "Rules:",
+    "- Use the partner_name given in the user JSON. Do not rename them.",
+    "- The role should fit this ordinary situation and this person's personality.",
+    "- title_zh, description_zh, partner_role_zh, and goal_zh are Chinese.",
+    "- partner_role_en, goal_en, opening, clarify_en, and rescue_en are English.",
+    "- opening is one short English line the partner says first.",
+    "- rescue_en is one simple English sentence the learner could say.",
+    "- Do not put Chinese inside the English fields.",
+    "- Avoid the titles listed in avoid_titles.",
   ].join("\n");
 }

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { ApiError, api } from "./api/client";
+import { ApiError, api, subscribePractice } from "./api/client";
 import { RadarScore } from "./RadarScore";
 import { formatWhen } from "./lib/time";
 import type { PracticeRecord } from "./types";
@@ -20,17 +20,22 @@ export function RecordsScreen({ onOpen }: RecordsScreenProps) {
 
   useEffect(() => {
     let alive = true;
-    api
-      .profile()
-      .then((profile) => {
-        if (alive) setRecords(profile.records);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        setError(err instanceof ApiError ? err.message : "练习记录没有加载出来。");
-      });
+    function load() {
+      api
+        .profile()
+        .then((profile) => {
+          if (alive) setRecords(profile.records);
+        })
+        .catch((err: unknown) => {
+          if (!alive) return;
+          setError(err instanceof ApiError ? err.message : "练习记录没有加载出来。");
+        });
+    }
+    load();
+    const stop = subscribePractice(load);
     return () => {
       alive = false;
+      stop();
     };
   }, []);
 
@@ -155,7 +160,7 @@ export function RecordsScreen({ onOpen }: RecordsScreenProps) {
                         <strong>{record.scene_title_zh}</strong>
                         <span>{record.preview}</span>
                         <span className="record-meta">
-                          {record.finished_at ? "已小结" : "进行中"} · {record.user_turns} 句 · {record.correction_count} 处指正
+                          {record.ending ? "在写小结…" : record.finished_at ? "已小结" : "进行中"} · {record.user_turns} 句 · {record.correction_count} 处指正
                         </span>
                       </div>
                     )}
