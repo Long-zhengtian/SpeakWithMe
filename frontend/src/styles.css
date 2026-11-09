@@ -430,6 +430,15 @@ button.partner-avatar .avatar { width: 100%; height: 100%; }
 
 .pending { color: var(--soft); }
 
+.reply-wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  justify-self: start;
+  color: var(--soft);
+}
+
 .correction-ok {
   justify-self: end;
   width: 1.35rem;
@@ -676,10 +685,12 @@ label { font-size: 0.92rem; }
   position: relative;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--clay);
+  background: var(--card);
   overflow: hidden;
   touch-action: pan-y;
 }
+
+.home-scene.is-revealed { background: var(--clay); }
 
 .home-scene-open {
   position: relative;
@@ -711,6 +722,12 @@ label { font-size: 0.92rem; }
 
 .home-scene-open:hover:not(:disabled) { background: var(--cream); }
 
+button.home-scene-open:disabled,
+button.home-scene-remove:disabled {
+  opacity: 1;
+  color: inherit;
+}
+
 .home-scene-remove {
   position: absolute;
   top: 0;
@@ -721,7 +738,10 @@ label { font-size: 0.92rem; }
   background: var(--clay);
   color: #fffaf3;
   font-size: 0.92rem;
+  visibility: hidden;
 }
+
+.home-scene.is-revealed .home-scene-remove { visibility: visible; }
 
 .home-shelf { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 

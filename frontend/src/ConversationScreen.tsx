@@ -7,6 +7,7 @@ import { closeOverlay, useOverlay } from "./lib/overlay";
 import { subscribeSpeechNotice } from "./lib/speechNotice";
 import { speak, stopSpeaking } from "./lib/speak";
 import type { ChatMessage, CoachLine, Gloss, Recap, Session } from "./types";
+import { Avatar } from "./Avatar";
 import { GlossCard } from "./GlossCard";
 import { HearButton } from "./HearButton";
 import { MessageBubble } from "./MessageBubble";
@@ -102,7 +103,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   useEffect(() => {
     const scroller = bottomRef.current?.parentElement;
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
-  }, [messages, pendingCorrectionId, recap]);
+  }, [messages, pendingCorrectionId, recap, sending]);
 
   useEffect(() => {
     if (!heardReady.current) {
@@ -208,16 +209,30 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   async function sendLine(text: string, assisted: boolean) {
     const cleaned = text.trim();
     if (!cleaned || sendingRef.current || recapLoading) return;
+    const optimisticId = `local-${Date.now().toString(36)}`;
+    const optimistic: ChatMessage = {
+      id: optimisticId,
+      role: "user",
+      text: cleaned,
+      assisted,
+      correction: null,
+    };
     sendingRef.current = true;
     setSending(true);
     setError(null);
+    setMessages((current) => [...current, optimistic]);
+    if (!assisted) setDraft("");
+    if (assisted) setCoachOpen(false);
     try {
       const result = await api.sendMessage(session.id, cleaned, assisted);
-      setMessages((current) => [...current, result.user_message, result.assistant_message]);
-      if (!assisted) setDraft("");
-      if (assisted) setCoachOpen(false);
+      setMessages((current) =>
+        current.flatMap((item) => (item.id === optimisticId ? [result.user_message, result.assistant_message] : [item])),
+      );
       if (!assisted && session.corrections_enabled) void requestCorrection(result.user_message.id);
     } catch (err) {
+      setMessages((current) => current.filter((item) => item.id !== optimisticId));
+      if (!assisted) setDraft(cleaned);
+      if (assisted) setCoachOpen(true);
       setError(err instanceof ApiError ? err.message : "这句话没发出去。");
     } finally {
       sendingRef.current = false;
@@ -333,7 +348,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   }
 
   async function endScene() {
-    if (!userSpoke || recapLoading) return;
+    if (!userSpoke || sending || recapLoading) return;
     setRecapLoading(true);
     setError(null);
     try {
@@ -390,7 +405,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
           type="button"
           className="ghost"
           data-testid="end-session"
-          disabled={!userSpoke || recapLoading || recap !== null}
+          disabled={!userSpoke || sending || recapLoading || recap !== null}
           onClick={() => void endScene()}
         >
           {recapLoading ? "在写小结…" : "结束这场"}
@@ -457,7 +472,12 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               ) : null}
             </MessageBubble>
           ))}
-          {sending ? <p className="pending">{session.scene.partner_name} 在接话…</p> : null}
+          {sending ? (
+            <p className="reply-wait">
+              <Avatar name={session.scene.partner_name} />
+              <span>{session.scene.partner_name} 在接话…</span>
+            </p>
+          ) : null}
           {recap ? (
             <section className="recap" data-testid="recap">
               <h2>这场小结</h2>

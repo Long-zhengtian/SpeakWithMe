@@ -244,7 +244,7 @@ function SceneRow({
 
   return (
     <article
-      className="home-scene"
+      className={offset < 0 ? "home-scene is-revealed" : "home-scene"}
       ref={rowRef}
       onContextMenu={(event) => {
         if (disabled) return;
@@ -252,7 +252,7 @@ function SceneRow({
         setMenu({ top: event.clientY + 6, left: Math.min(event.clientX, window.innerWidth - 120) });
       }}
     >
-      <button type="button" className="home-scene-remove" tabIndex={offset < 0 ? 0 : -1} aria-label={`移出首页 ${title}`} disabled={disabled} onClick={onRemove}>
+      <button type="button" className="home-scene-remove" tabIndex={offset < 0 ? 0 : -1} aria-hidden={offset >= 0} aria-label={`移出首页 ${title}`} disabled={disabled} onClick={onRemove}>
         移出
       </button>
       <button
