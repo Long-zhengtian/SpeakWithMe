@@ -77,6 +77,7 @@ export const api = {
   createSession: (input: { sceneId?: string; level: string; situationZh?: string; correctionsEnabled?: boolean }) =>
     call(() => localApi.createSession(input) as Promise<Session>),
   gloss: (text: string) => call(() => localApi.gloss(text) as Promise<Gloss>),
+  translate: (text: string) => call(() => localApi.translate(text) as Promise<string>),
   phrases: () => call(() => localApi.phrases() as Promise<Phrase[]>),
   savePhrase: (text: string, glossZh: string, kind: "word" | "sentence") =>
     call(() => localApi.savePhrase(text, glossZh, kind) as Promise<Phrase>),

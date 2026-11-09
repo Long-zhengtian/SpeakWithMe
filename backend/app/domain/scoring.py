@@ -218,12 +218,11 @@ def _dimension_score(result, key):
     return 0
 
 
-def _summary(day, is_today, scored):
-    name = "今天" if is_today else "%d/%d" % (day.month, day.day)
+def _summary(_day, _is_today, scored):
     turns = sum(result["turns"] for result, _weight in scored)
     clear = sum(result["clear"] for result, _weight in scored)
     corrected = sum(result["corrected"] for result, _weight in scored)
-    head = "%s %d 场，说了 %d 句" % (name, len(scored), turns)
+    head = "%d 场，说了 %d 句" % (len(scored), turns)
     judged = clear + corrected
     if judged and clear == judged:
         middle = "，这句不用改" if turns == 1 else "，这几句都不用改"

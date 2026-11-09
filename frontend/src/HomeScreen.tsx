@@ -77,12 +77,6 @@ function ProgressPanel({ profile, phrases }: { profile: Profile; phrases: Phrase
   const sentences = phrases.filter((item) => item.kind === "sentence");
   const words = phrases.filter((item) => item.kind !== "sentence");
   const mastered = (items: Phrase[]) => items.filter((item) => item.learning_status === "mastered").length;
-  const streak =
-    !progress || progress.streak === 0
-      ? "还没接上连续练习"
-      : progress.spoke_today
-        ? `连续 ${progress.streak} 天`
-        : `连续 ${progress.streak} 天，今天还没开口`;
   const selectedScore: SessionScore | null =
     selected && selected.score !== null ? { total: selected.score, dimensions: selected.dimensions } : null;
   return (
@@ -93,11 +87,9 @@ function ProgressPanel({ profile, phrases }: { profile: Profile; phrases: Phrase
         <div>
           <p className="progress-summary">
             <strong>{dayHeading(selected)}</strong>
-            <span>{streak}</span>
-            <span>一共练过 {progress?.practice_days ?? 0} 天</span>
-            {progress && progress.best > progress.streak ? <span>最长连续 {progress.best} 天</span> : null}
           </p>
           {selected?.summary ? <p className="day-summary">{selected.summary}</p> : null}
+          <p className="habit">{habitLine(progress)}</p>
         </div>
       </div>
       <div className="day-strip" aria-label="最近十四天的评分">
@@ -141,8 +133,18 @@ function ProgressPanel({ profile, phrases }: { profile: Profile; phrases: Phrase
 }
 
 function dayHeading(day: DayScore | undefined) {
-  if (!day || day.score === null) return "今天还没开口";
-  if (day.today) return `今天 ${day.score}`;
+  if (!day || (day.today && day.score === null)) return "今天还没开口";
+  if (day.today) return "今天";
   const [, month, date] = day.date.split("-");
-  return `${Number(month)}/${Number(date)} ${day.score}`;
+  return `${Number(month)}月${Number(date)}日`;
+}
+
+function habitLine(progress: Profile["progress"]) {
+  const days = progress?.practice_days ?? 0;
+  if (!progress || progress.streak === 0) {
+    return days ? `还没接上连续练习 · 一共 ${days} 天` : "还没接上连续练习";
+  }
+  const parts = [`连续 ${progress.streak} 天`, `一共 ${days} 天`];
+  if (progress.best > progress.streak) parts.push(`最长 ${progress.best} 天`);
+  return parts.join(" · ");
 }

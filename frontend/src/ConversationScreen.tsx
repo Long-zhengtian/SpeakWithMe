@@ -11,6 +11,24 @@ import { GlossCard } from "./GlossCard";
 import { HearButton } from "./HearButton";
 import { MessageBubble } from "./MessageBubble";
 
+function KeyboardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M7 10h.01M12 10h.01M17 10h.01M7 14h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M6 11a6 6 0 0 0 12 0M12 17v3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 type ConversationScreenProps = {
   session: Session;
   onExit: () => void;
@@ -37,28 +55,43 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   const listenerRef = useRef<EnglishListener | null>(null);
   const sendingRef = useRef(false);
   const talkHoldRef = useRef<HTMLButtonElement | null>(null);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
+  const voiceRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusDraft = useRef(false);
   const intentHoldRef = useRef<HTMLButtonElement | null>(null);
   const talkStartRef = useRef<() => void>(() => {});
   const intentStartRef = useRef<() => void>(() => {});
   const [listening, setListening] = useState(false);
+  const [inputMode, setInputMode] = useState<"voice" | "text">(canListen() ? "voice" : "text");
   const [coachOpen, setCoachOpen] = useState(false);
   const [intentListening, setIntentListening] = useState(false);
   const [phone, setPhone] = useState(() => document.documentElement.classList.contains("is-phone"));
   const microphone = canListen();
   const heardRef = useRef<Set<string>>(new Set());
+  const heardReady = useRef(false);
 
   const userSpoke = messages.some((message) => message.role === "user");
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    const scroller = bottomRef.current?.parentElement;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
   }, [messages, pendingCorrectionId, recap]);
 
   useEffect(() => {
+    if (!heardReady.current) {
+      heardReady.current = true;
+      if (messages.some((message) => message.role === "user")) {
+        for (const message of messages) {
+          if (message.role === "assistant") heardRef.current.add(message.id);
+        }
+        return;
+      }
+    }
     const newest = [...messages].reverse().find((message) => message.role === "assistant");
     if (!newest || heardRef.current.has(newest.id) || listening) return;
     heardRef.current.add(newest.id);
     speak(newest.text, newest.id, session.scene.partner_name);
-  }, [messages, listening]);
+  }, [messages, listening, session.scene.partner_name]);
 
   useEffect(
     () => () => {
@@ -90,7 +123,9 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     return () => media.removeEventListener("change", apply);
   }, []);
 
-  useOverlay(coachOpen && phone, () => {
+  const sheetOpen = phone && (coachOpen || gloss !== null);
+
+  useOverlay(sheetOpen, () => {
     setCoachOpen(false);
     setGloss(null);
   });
@@ -105,7 +140,19 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
       cleanups.push(bindHold(intentHoldRef.current, { start: () => intentStartRef.current(), end: endHold }));
     }
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [microphone, coachOpen, phone]);
+  }, [microphone, coachOpen, phone, inputMode]);
+
+  useEffect(() => {
+    for (const node of [draftRef.current, voiceRef.current]) {
+      if (!node) continue;
+      node.style.height = "40px";
+      node.style.height = `${Math.min(node.scrollHeight, 120)}px`;
+    }
+    if (focusDraft.current) {
+      focusDraft.current = false;
+      draftRef.current?.focus();
+    }
+  }, [draft, inputMode]);
 
   async function requestCorrection(messageId: string) {
     setPendingCorrectionId(messageId);
@@ -211,7 +258,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
 
   function dismissGloss() {
     setGloss(null);
-    if (phone) closeSheet();
+    if (phone && coachOpen) closeSheet();
   }
 
   function onSend(event: FormEvent) {
@@ -261,7 +308,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     setError(null);
     try {
       setGloss(await api.gloss(word));
-      setCoachOpen(true);
+      setCoachOpen(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "这个词没有查到。");
     }
@@ -280,32 +327,28 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   }
 
   return (
-    <main className="studio">
+    <main className="studio talk">
       <header className="studio-top">
-        <div>
-          <p className="brand">Speak With Me</p>
+        <button type="button" className="ghost" onClick={onExit}>
+          {exitLabel}
+        </button>
+        <div className="talk-heading">
           <h1>
             {session.scene.title_zh}
             <span>
               {session.scene.partner_name} · {session.scene.partner_role_zh} · {session.level}
             </span>
           </h1>
-          <p className="goal">{session.scene.goal_zh}</p>
         </div>
-        <div className="top-actions">
-          <button type="button" className="ghost" onClick={onExit}>
-            {exitLabel}
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            data-testid="end-session"
-            disabled={!userSpoke || recapLoading || recap !== null}
-            onClick={() => void endScene()}
-          >
-            {recapLoading ? "在写小结…" : "结束这场"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className="ghost"
+          data-testid="end-session"
+          disabled={!userSpoke || recapLoading || recap !== null}
+          onClick={() => void endScene()}
+        >
+          {recapLoading ? "在写小结…" : "结束这场"}
+        </button>
       </header>
       {status ? <p className="pending">{status}</p> : null}
       {error ? (
@@ -383,10 +426,10 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
           ) : null}
           <div ref={bottomRef} />
         </section>
-        {coachOpen ? (
+        {sheetOpen ? (
           <button type="button" className="sheet-backdrop" aria-label="收起" onClick={closeSheet} />
         ) : null}
-        <aside className={`rail${coachOpen ? " sheet-open" : ""}`}>
+        <aside className={`rail${sheetOpen ? " sheet-open" : ""}`}>
           <div className="sheet-bar">
             <span className="sheet-grab" aria-hidden="true" />
             <button type="button" className="ghost sheet-close" onClick={closeSheet}>
@@ -406,14 +449,13 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               }}
             />
           ) : null}
+          {!phone || coachOpen ? (
           <form className="panel" onSubmit={onAsk}>
-            <h2>怎么说</h2>
-            <p className="muted">中文留在这里，{session.scene.partner_name} 看不到。</p>
-            <label htmlFor="coach-input">想说的意思</label>
             <textarea
               id="coach-input"
               data-testid="coach-input"
               value={intent}
+              aria-label="想说的意思"
               placeholder={intentListening ? "正在听…" : "例如：我想要一杯冰拿铁"}
               readOnly={intentListening}
               onChange={(event) => setIntent(event.target.value)}
@@ -488,44 +530,88 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               </div>
             ) : null}
           </form>
+          ) : null}
           </div>
         </aside>
         {recap ? null : (
-          <form className="composer" onSubmit={onSend}>
-            <label htmlFor="message-input">你的英语</label>
-            <textarea
-              id="message-input"
-              data-testid="message-input"
-              value={draft}
-              placeholder={listening ? "正在听…" : "用英语说，或按住旁边的按钮开口。"}
-              disabled={sending}
-              readOnly={listening}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-            />
-            <div className="composer-actions">
-              <button type="button" className="ghost coach-open" onClick={() => setCoachOpen(true)}>
-                怎么说
-              </button>
-              {microphone ? (
-                <button
-                  type="button"
-                  ref={talkHoldRef}
-                  className={`mic ${listening ? "live" : ""}`}
-                  data-testid="hold-to-talk"
-                  disabled={sending || intentListening}
-                >
-                  {listening ? "正在听…" : "按住说"}
+          <form className={`composer ${inputMode === "voice" ? "is-voice" : "is-text"}`} onSubmit={onSend}>
+            {inputMode === "voice" && !listening && draft.trim() ? (
+              <div className="voice-preview">
+                <textarea
+                  ref={voiceRef}
+                  value={draft}
+                  aria-label="刚说的英语"
+                  rows={1}
+                  disabled={sending}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                />
+                <button className="primary composer-send" type="submit" data-testid="send-message" disabled={sending || !draft.trim()}>
+                  发送
                 </button>
-              ) : null}
-              <button className="primary" type="submit" data-testid="send-message" disabled={sending || listening || !draft.trim()}>
+                <button type="button" className="composer-chip" onClick={() => setDraft("")}>
+                  收起
+                </button>
+              </div>
+            ) : null}
+            <div className="composer-row">
+            {microphone ? (
+              <button
+                type="button"
+                className="composer-switch"
+                aria-label={inputMode === "voice" ? "打字" : "说话"}
+                onClick={() => {
+                  listenerRef.current?.stop();
+                  const next = inputMode === "voice" ? "text" : "voice";
+                  if (next === "text") focusDraft.current = true;
+                  setInputMode(next);
+                }}
+              >
+                {inputMode === "voice" ? <KeyboardIcon /> : <MicIcon />}
+              </button>
+            ) : null}
+            {inputMode === "voice" && microphone ? (
+              <button
+                type="button"
+                ref={talkHoldRef}
+                className={`hold-bar ${listening ? "live" : ""}`}
+                data-testid="hold-to-talk"
+                disabled={sending || intentListening}
+              >
+                {listening ? "松开 结束" : "按住 说话"}
+              </button>
+            ) : (
+              <textarea
+                id="message-input"
+                ref={draftRef}
+                data-testid="message-input"
+                rows={1}
+                value={draft}
+                aria-label="英语"
+                placeholder="英语"
+                disabled={sending}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+              />
+            )}
+            {inputMode === "text" && draft.trim() ? (
+              <button className="primary composer-send" type="submit" data-testid="send-message" disabled={sending}>
                 发送
               </button>
+            ) : null}
+            <button type="button" className="composer-chip coach-open" onClick={() => setCoachOpen(true)}>
+              怎么说
+            </button>
             </div>
           </form>
         )}

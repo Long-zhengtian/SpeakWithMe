@@ -1,4 +1,5 @@
-import { readSpeech, voiceFor } from "../engine/speech";
+import { voiceFor } from "../engine/speech";
+import { openSpeech, speechFailure } from "./azure";
 import { speechError, speechStatus } from "./speechNotice";
 
 type Listener = (key: string | null) => void;
@@ -42,11 +43,8 @@ export function speak(text: string, key = "", partnerName?: string) {
 async function runSpeak(text: string, mine: number, token: string, partnerName?: string) {
   try {
     speechStatus("正在准备朗读…");
-    const saved = await readSpeech();
-    if (!saved.key || !saved.endpoint) throw new Error("先在设置的语音里填上 Azure 密钥和终结点。");
-    const sdk = await import("microsoft-cognitiveservices-speech-sdk");
+    const { sdk, config, saved } = await openSpeech();
     if (generation !== mine) return;
-    const config = sdk.SpeechConfig.fromEndpoint(new URL(saved.endpoint), saved.key);
     config.speechSynthesisVoiceName = voiceFor(saved, partnerName);
     const synthesizer = new sdk.SpeechSynthesizer(config);
     current = synthesizer;
@@ -59,12 +57,12 @@ async function runSpeak(text: string, mine: number, token: string, partnerName?:
           synthesizer.close();
           if (current === synthesizer) current = null;
           if (done) resolve();
-          else reject(new Error(result.errorDetails || "朗读没有准备好，稍后再点一次。"));
+          else reject(new Error(speechFailure(result.errorDetails || "", "朗读")));
         },
         (error) => {
           synthesizer.close();
           if (current === synthesizer) current = null;
-          reject(new Error(typeof error === "string" ? error : "朗读没有准备好，稍后再点一次。"));
+          reject(new Error(speechFailure(typeof error === "string" ? error : "", "朗读")));
         },
       );
     });
@@ -74,7 +72,7 @@ async function runSpeak(text: string, mine: number, token: string, partnerName?:
     speechStatus(null);
     publish(null);
     const message = error instanceof Error ? error.message : "";
-    speechError(/密钥|终结点/.test(message) ? message : "朗读没有准备好，稍后再点一次。");
+    speechError(message || "朗读没有准备好，稍后再点一次。");
   }
 }
 

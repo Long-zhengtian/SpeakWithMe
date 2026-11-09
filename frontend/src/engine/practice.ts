@@ -563,6 +563,28 @@ export const localApi = {
     return session.recap;
   },
 
+  async translate(text: string) {
+    const settings = await requireModel();
+    const line = (text || "").trim();
+    if (!line) fail(422, "empty_text", "没有可以翻译的句子。");
+    if (line.length > MAX_MESSAGE_CHARS) fail(422, "text_too_long", "这句太长了。");
+    let raw = "";
+    try {
+      raw = await complete(settings.base_url, settings.api_key, settings.model, {
+        system: "Translate the English sentence into natural spoken Chinese. Return only the Chinese translation.",
+        messages: [{ role: "user", content: line }],
+        task: "translate",
+        json: false,
+      });
+    } catch (error) {
+      if (error instanceof EngineError) throw error;
+      fail(502, "llm_unavailable", "这句没有译出来。");
+    }
+    const chinese = cleanReply(raw).replace(/^译文[:：]\s*/, "");
+    if (!mostlyChinese(chinese)) fail(502, "bad_translation", "这句没有译出来。");
+    return chinese;
+  },
+
   async gloss(text: string) {
     const cleaned = (text || "").trim();
     if (!cleaned) fail(422, "empty_text", "先点一个英语词，或留下一句。");

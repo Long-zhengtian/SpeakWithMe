@@ -227,13 +227,11 @@ function dimensionScore(result: SessionScoreResult, key: string) {
   return result.dimensions.find((item) => item.id === key)?.score ?? 0;
 }
 
-function summary(day: string, isToday: boolean, scored: { result: SessionScoreResult }[]) {
-  const [, month, date] = day.split("-");
-  const name = isToday ? "今天" : `${Number(month)}/${Number(date)}`;
+function summary(_day: string, _isToday: boolean, scored: { result: SessionScoreResult }[]) {
   const turns = scored.reduce((sum, item) => sum + item.result.turns, 0);
   const clear = scored.reduce((sum, item) => sum + item.result.clear, 0);
   const corrected = scored.reduce((sum, item) => sum + item.result.corrected, 0);
-  const head = `${name} ${scored.length} 场，说了 ${turns} 句`;
+  const head = `${scored.length} 场，说了 ${turns} 句`;
   const judged = clear + corrected;
   let middle = "";
   if (judged && clear === judged) middle = turns === 1 ? "，这句不用改" : "，这几句都不用改";

@@ -1,4 +1,4 @@
-import { readSpeech } from "../engine/speech";
+import { openSpeech, speechFailure } from "./azure";
 import { speechError, speechStatus } from "./speechNotice";
 
 export type EnglishListener = {
@@ -58,13 +58,7 @@ function startListener(
 
   void (async () => {
     try {
-      const saved = await readSpeech();
-      if (!saved.key || !saved.endpoint) {
-        fail("先在设置的语音里填上 Azure 密钥和终结点。");
-        return;
-      }
-      const sdk = await import("microsoft-cognitiveservices-speech-sdk");
-      const config = sdk.SpeechConfig.fromEndpoint(new URL(saved.endpoint), saved.key);
+      const { sdk, config } = await openSpeech();
       config.speechRecognitionLanguage = language;
       const recognizer = new sdk.SpeechRecognizer(config, sdk.AudioConfig.fromDefaultMicrophoneInput());
       recognizer.recognizing = (_sender, event) => {
@@ -118,8 +112,7 @@ function join(pieces: string[], partial: string) {
 }
 
 function listenMessage(details: string) {
-  if (/密钥|终结点/.test(details)) return details;
   if (/permission|not allowed|denied|microphone/i.test(details)) return "麦克风没有打开。允许之后再按住说。";
-  if (/websocket|network|401|403|unavailable|endpoint/i.test(details)) return "听写暂时连不上，可以先打字。";
-  return "这次没有听清，再按住说一次。";
+  if (/no match|nomatch/i.test(details)) return "这次没有听清，再按住说一次。";
+  return speechFailure(details, "听写");
 }

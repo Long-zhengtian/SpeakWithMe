@@ -82,7 +82,7 @@ def test_a_day_weights_a_longer_conversation_more():
     expected = int((short_score * 1 + long_score * 4) / 5.0 + 0.5)
     assert today["score"] == expected
     assert today["score"] > short_score
-    assert "今天 2 场，说了 5 句" in today["summary"]
+    assert "2 场，说了 5 句" in today["summary"]
     assert "改得最多的是说法" in today["summary"]
     assert calendar["spoke_today"] is True
     assert len(calendar["days"]) == 14
