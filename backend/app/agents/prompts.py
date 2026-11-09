@@ -25,10 +25,13 @@ def correction_system(level):
             "Learner level: %s. %s" % (level.id, level.guide_en),
             'Return JSON only: {"correction": null} or {"correction": {"original_span": "", "suggestion": "", "category": "", "explanation_zh": ""}}.',
             "Rules:",
-            "- At most one correction, the most useful one at this level.",
-            "- If the meaning is already clear enough, return null.",
-            "- suggestion is a full natural sentence the learner can say next.",
-            "- explanation_zh is one short Chinese sentence, not a grammar lecture.",
+            "- Fix every problem in the sentence. Do not stop after the first one.",
+            "- suggestion is the whole sentence rewritten in natural spoken English, with every problem fixed.",
+            "- Stay within the learner's level. Repair the sentence; do not make it fancier.",
+            "- If the sentence is already natural, return null.",
+            "- original_span is the learner's whole sentence.",
+            "- explanation_zh is one or two short Chinese sentences naming what was wrong, not a grammar lecture.",
+            "- category is the main kind of problem. If several were fixed, choose the one that most changed the meaning.",
             "- category is one of: article, tense, agreement, word_choice, word_order, politeness, other.",
             "- Do not comment on sentences that were supplied as a model line.",
         ]
@@ -56,6 +59,18 @@ def coach_system(scene, level):
     )
 
 
+def fold_system():
+    return "\n".join(
+        [
+            "You compress the earlier part of a spoken English practice.",
+            "Write 2 to 4 short English sentences about what has already been talked about.",
+            "Keep the concrete facts the learner said.",
+            "If an earlier summary is included, carry its facts forward and add the new lines.",
+            "Do not correct grammar. Do not give advice. Do not add a new question.",
+        ]
+    )
+
+
 def recap_system():
     return "\n".join(
         [
@@ -67,6 +82,7 @@ def recap_system():
             "- keep_sentence is one English sentence from this scene worth saying again. Prefer an assisted line, otherwise the corrected suggestion.",
             "- revised_from is the learner's own English that was corrected. Leave it empty when nothing was corrected.",
             "- Mention an assisted line as something to reuse without help.",
+            "- If already_talked_about is present, it summarizes earlier turns. turns are only the later lines.",
             "- Do not give a grammar lecture.",
         ]
     )

@@ -7,7 +7,7 @@ from app.agents.scene import SceneAgent
 from app.domain.errors import AppError
 from app.domain.levels import get_level
 from app.domain.models import Message, Phrase, Session, new_id, now_iso
-from app.domain.policy import MAX_INTENT_CHARS, MAX_MESSAGE_CHARS, MAX_USER_TURNS
+from app.domain.policy import MAX_INTENT_CHARS, MAX_MESSAGE_CHARS
 from app.domain.scenes import get_scene, scene_for
 from app.providers.openai_compatible import LLMError
 
@@ -96,6 +96,7 @@ class SessionService(object):
             created_at=now_iso(),
             corrections_enabled=source.corrections_enabled,
             custom_scene=source.custom_scene,
+            title_zh=source.title_zh,
             messages=copied,
         )
         if copied[-1].role == "user":
@@ -125,6 +126,20 @@ class SessionService(object):
             correction_ready=True,
         )
 
+    def rename_session(self, session_id, title_zh):
+        session = self.get_session(session_id)
+        cleaned = (title_zh or "").strip()
+        if not cleaned:
+            raise AppError(422, "empty_title", "先写一个名字。")
+        if len(cleaned) > 40:
+            raise AppError(422, "title_too_long", "名字短一点，四十个字以内。")
+        updated = session.model_copy(update={"title_zh": cleaned})
+        return self.repository.save(updated)
+
+    def delete_session(self, session_id):
+        if not self.repository.delete_session(session_id):
+            raise AppError(404, "session_not_found", "这场对话不在记录里。")
+
     def get_session(self, session_id):
         session = self.repository.get(session_id)
         if session is None:
@@ -142,9 +157,6 @@ class SessionService(object):
             raise AppError(422, "empty_message", "先写一句再发送。")
         if len(cleaned) > MAX_MESSAGE_CHARS:
             raise AppError(422, "message_too_long", "这句话太长了，缩短一点。")
-        user_turns = sum(1 for message in session.messages if message.role == "user")
-        if user_turns >= MAX_USER_TURNS:
-            raise AppError(409, "session_full", "这场已经够长了，先结束再开一场。")
         user_message = Message(
             id=new_id(),
             role="user",
@@ -152,6 +164,7 @@ class SessionService(object):
             assisted=bool(assisted),
             correction=None,
             correction_ready=bool(assisted) or not session.corrections_enabled,
+            created_at=now_iso(),
         )
         draft = session.model_copy(update={"messages": list(session.messages) + [user_message]})
         reply_text = await self.chat_agent.reply(draft, level)
@@ -260,4 +273,14 @@ class SessionService(object):
 
     def delete_phrase(self, phrase_id):
         if not self.repository.delete_phrase(phrase_id):
-            raise AppError(404, "phrase_not_found", "句型本里没有这一条。")
+            raise AppError(404, "phrase_not_found", "笔记本里没有这一条。")
+
+    def set_phrase_status(self, phrase_id, learning_status):
+        status = (learning_status or "").strip()
+        if status not in ("learning", "mastered"):
+            raise AppError(422, "invalid_phrase_status", "只能标成正在学或已学会。")
+        phrase = next((item for item in self.repository.list_phrases() if item.id == phrase_id), None)
+        if phrase is None:
+            raise AppError(404, "phrase_not_found", "笔记本里没有这一条。")
+        updated = phrase.model_copy(update={"learning_status": status})
+        return self.repository.save_phrase(updated)

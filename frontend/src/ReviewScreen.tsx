@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { ApiError, api } from "./api/client";
 import { categoryLabel } from "./lib/labels";
-import { canSpeak, speak } from "./lib/speak";
+import { closeOverlay, useOverlay } from "./lib/overlay";
 import { formatWhen } from "./lib/time";
 import type { Gloss, Session } from "./types";
 import { GlossCard } from "./GlossCard";
-import { WordText } from "./WordText";
+import { MessageBubble } from "./MessageBubble";
 
 type ReviewScreenProps = {
   session: Session;
@@ -24,11 +24,16 @@ export function ReviewScreen({
   canPractice,
   backLabel = "返回记录",
 }: ReviewScreenProps) {
-  const spoken = canSpeak();
   const [gloss, setGloss] = useState<Gloss | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+
+  useOverlay(gloss !== null, () => setGloss(null));
+
+  function closeGloss() {
+    if (!closeOverlay()) setGloss(null);
+  }
 
   async function lookup(word: string) {
     setError(null);
@@ -55,8 +60,10 @@ export function ReviewScreen({
     try {
       await api.savePhrase(text, glossZh, kind);
       setSavedKey(`${kind}:${text}`);
+      return true;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "没有收进句型本。");
+      setError(err instanceof ApiError ? err.message : "没有收进笔记本。");
+      return false;
     }
   }
 
@@ -103,28 +110,30 @@ export function ReviewScreen({
             <GlossCard
               gloss={gloss}
               saved={savedKey === `word:${gloss.text}`}
-              onKeep={() => void keep(gloss.text, gloss.gloss_zh, "word")}
+              onClose={closeGloss}
+              onKeep={() => {
+                void keep(gloss.text, gloss.gloss_zh, "word").then((saved) => {
+                  if (saved) closeGloss();
+                });
+              }}
             />
           ) : null}
           {session.messages.map((message) => (
-            <article key={message.id} className={`bubble ${message.role === "user" ? "user" : "partner"}`}>
-              <header>
-                <span>{message.role === "user" ? "你" : session.scene.partner_name}</span>
-                {message.assisted ? <em>借助</em> : null}
-                <button type="button" className="text-button" onClick={() => speak(message.text)} disabled={!spoken}>
-                  听
-                </button>
-                <button
-                  type="button"
-                  className="text-button"
-                  data-testid={`continue-${message.id}`}
-                  onClick={() => void startFrom(message.id)}
-                  disabled={!canPractice || starting !== null}
-                >
-                  {starting === message.id ? "正在开始…" : "从这句开始"}
-                </button>
-              </header>
-              <WordText text={message.text} onWord={(word) => void lookup(word)} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              partnerName={session.scene.partner_name}
+              onWord={(word) => void lookup(word)}
+            >
+              <button
+                type="button"
+                className="text-button"
+                data-testid={`continue-${message.id}`}
+                onClick={() => void startFrom(message.id)}
+                disabled={!canPractice || starting !== null}
+              >
+                {starting === message.id ? "正在开始…" : "从这句开始"}
+              </button>
               {message.correction ? (
                 <aside className="correction">
                   <span>{categoryLabel(message.correction.category)}</span>
@@ -145,7 +154,7 @@ export function ReviewScreen({
               {message.role === "user" && session.corrections_enabled && message.correction_status === "failed" ? (
                 <p className="correction-miss">模型调用失败，这句还没看完。</p>
               ) : null}
-            </article>
+            </MessageBubble>
           ))}
         </section>
         {session.recap ? (

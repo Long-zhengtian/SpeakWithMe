@@ -58,6 +58,10 @@ class ForkBody(BaseModel):
     through_message_id: str = ""
 
 
+class RenameBody(BaseModel):
+    title_zh: str = Field(min_length=1, max_length=40)
+
+
 class SendMessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=800)
     assisted: bool = False
@@ -151,6 +155,36 @@ class FeedbackNote(BaseModel):
     revised_from: str = ""
 
 
+class ScoreDimension(BaseModel):
+    id: str
+    label_zh: str
+    score: int
+
+
+class SessionScore(BaseModel):
+    total: int
+    dimensions: List[ScoreDimension]
+
+
+class DayScore(BaseModel):
+    date: str
+    label: str
+    today: bool = False
+    sessions: int = 0
+    turns: int = 0
+    score: Optional[int] = None
+    summary: str = ""
+    dimensions: List[ScoreDimension] = Field(default_factory=list)
+
+
+class ProgressPublic(BaseModel):
+    streak: int = 0
+    best: int = 0
+    practice_days: int = 0
+    spoke_today: bool = False
+    days: List[DayScore] = Field(default_factory=list)
+
+
 class PracticeRecord(BaseModel):
     id: str
     scene_title_zh: str
@@ -163,6 +197,11 @@ class PracticeRecord(BaseModel):
     assisted_turns: int
     try_next: Optional[str] = None
     preview: str
+    score: Optional[SessionScore] = None
+
+
+class ActivityPoint(BaseModel):
+    at: str
 
 
 class ProfilePublic(BaseModel):
@@ -171,6 +210,8 @@ class ProfilePublic(BaseModel):
     recent_corrections: List[CorrectionNote]
     latest_feedback: Optional[FeedbackNote] = None
     records: List[PracticeRecord]
+    activity: List[ActivityPoint] = Field(default_factory=list)
+    progress: ProgressPublic = Field(default_factory=ProgressPublic)
 
 
 class GlossBody(BaseModel):
@@ -224,12 +265,25 @@ class SavePhraseBody(BaseModel):
     kind: str = Field(min_length=1, max_length=16)
 
 
+class PhraseStatusBody(BaseModel):
+    learning_status: str = Field(min_length=1, max_length=16)
+
+
+class BackupImportResult(BaseModel):
+    sessions: int
+    phrases: int
+    settings: bool
+
+
 def session_public(session):
-    scene = scene_for(session)
+    scene = scene_public(scene_for(session))
+    title = (session.title_zh or "").strip()
+    if title:
+        scene = scene.model_copy(update={"title_zh": title, "title": title})
     return SessionPublic(
         id=session.id,
         level=session.level,
-        scene=scene_public(scene),
+        scene=scene,
         messages=[message_public(message) for message in session.messages],
         finished_at=session.finished_at,
         recap=session.recap,

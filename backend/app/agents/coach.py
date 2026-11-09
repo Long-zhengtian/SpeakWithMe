@@ -1,6 +1,6 @@
 import json
 
-from app.agents.jsonutil import parse_json_object
+from app.agents.jsonutil import BadJson, complete_json
 from app.agents.prompts import coach_system
 from app.domain.errors import AppError
 from app.domain.models import CoachLine
@@ -27,15 +27,16 @@ class CoachAgent(object):
             "variant": variant,
         }
         try:
-            raw = await self.llm.complete(
-                system=coach_system(scene, level),
-                messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-                task=self.name,
-                response_format="json",
+            data = await complete_json(
+                self.llm,
+                coach_system(scene, level),
+                [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+                self.name,
             )
+        except BadJson:
+            data = {}
         except LLMError:
             raise AppError(502, "llm_unavailable", "这句话暂时没组织好，再试一次。")
-        data = parse_json_object(raw)
         sentence = str(data.get("sentence") or "").strip()
         if not sentence:
             raise AppError(502, "coach_empty", "没有得到能说的句子，再试一次。")

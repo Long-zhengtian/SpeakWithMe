@@ -8,6 +8,10 @@ __pycache__/
 backend/.env
 frontend/node_modules/
 frontend/dist/
+frontend/public/onnx/
+frontend/public/voices/
+frontend/public/models/
+frontend/local-speech-models/
 .DS_Store
 backend/data/
 *.sqlite

@@ -63,6 +63,7 @@ class Phrase(BaseModel):
     text: str
     gloss_zh: str
     created_at: str
+    learning_status: str = "learning"
 
 
 class Message(BaseModel):
@@ -73,6 +74,7 @@ class Message(BaseModel):
     correction: Optional[Correction] = None
     correction_ready: bool = False
     correction_status: str = ""
+    created_at: str = ""
 
 
 class Session(BaseModel):
@@ -85,4 +87,7 @@ class Session(BaseModel):
     recap: Optional[Recap] = None
     corrections_enabled: bool = True
     custom_scene: Optional[CustomScene] = None
+    title_zh: str = ""
+    folded_until_id: str = ""
+    folded_summary: str = ""
     messages: List[Message] = Field(default_factory=list)

@@ -1,0 +1,21 @@
+---
+description: 用户能感知的改动要在同一次修改里升版本号
+alwaysApply: true
+---
+
+# 版本号
+
+用户能感知的改动，在同一次修改里升版本。包括功能、练习行为、听写朗读、安装包里的内容。只改注释或文档措辞时不升。
+
+两处保持同一串版本号：
+
+- `frontend/package.json` 的 `version`
+- `frontend/android/app/build.gradle` 的 `versionName`
+
+`frontend/package-lock.json` 里本包的两处 `version` 跟着改。`versionCode` 每次升版本加 1。
+
+版本用 `主.次.修订`。新功能加次版本，修一个已有问题加修订号。
+
+这次改动如果会交给用户安装，重新编调试包，让安装包上的版本和上面两处一致。
+
+拿掉一整块已经能用的功能之前，先提交当前代码并打一个说明用途的标签，例如 `speech-local-models`。这样以后可以 `git checkout` 那个标签把功能找回来。模型权重不进 git。

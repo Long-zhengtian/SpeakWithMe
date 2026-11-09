@@ -1,7 +1,7 @@
 import json
 import logging
 
-from app.agents.jsonutil import parse_json_object
+from app.agents.jsonutil import BadJson, complete_json
 from app.agents.prompts import correction_system
 from app.domain.models import Correction
 from app.domain.policy import MAX_CONTEXT_TURNS
@@ -31,16 +31,19 @@ class CorrectionAgent(object):
             "recent_turns": recent,
         }
         try:
-            raw = await self.llm.complete(
-                system=correction_system(level),
-                messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-                task=self.name,
-                response_format="json",
+            data = await complete_json(
+                self.llm,
+                correction_system(level),
+                [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+                self.name,
             )
+        except BadJson:
+            logger.warning("correction json failed")
+            raise LLMError("invalid json")
         except LLMError:
             logger.warning("correction provider failed")
             raise
-        return _coerce_correction(parse_json_object(raw), message.text)
+        return _coerce_correction(data, message.text)
 
 
 def _coerce_correction(data, utterance):
@@ -50,7 +53,7 @@ def _coerce_correction(data, utterance):
     suggestion = str(raw.get("suggestion") or "").strip()
     if not suggestion:
         return None
-    original = str(raw.get("original_span") or "").strip() or utterance
+    original = utterance.strip() or str(raw.get("original_span") or "").strip()
     category = str(raw.get("category") or "").strip() or "other"
     explanation = str(raw.get("explanation_zh") or "").strip() or "这里可以换一种说法。"
     return Correction(

@@ -2,7 +2,7 @@
 
 每次调用都是同一套形状：一条 system 提示词，后面再跟若干条消息。提示词原文在 `backend/app/agents/prompts.py`。难度句子在 `backend/app/domain/levels.py`，三个预设场景在 `backend/app/domain/scenes.py`。
 
-真正发出去的请求在 `backend/app/providers/openai_compatible.py`：
+真正发出去的请求在 `backend/app/providers/openai_compatible.py`。查错、怎么说、小结、自定义场景要的是 JSON。返回的不是一个 JSON 对象时，会把这次原文附在下一次请求里再问一遍，只再问一次。
 
 | | 对话 | 查错、怎么说、小结、自定义场景 |
 | --- | --- | --- |
@@ -54,7 +54,17 @@ Rules:
 | 上课要迟到 | Sam, a classmate waiting at the classroom door | Help the learner explain why they are late and when they will arrive. | Hey. Class is about to start. Where are you? |
 | 聊聊周末 | Lina, a friend you meet on Monday | Help the learner say one thing they did on the weekend and answer a follow-up. | Hi! How was your weekend? |
 
-后面的消息是整场英文对话，角色只有 `user` 和 `assistant`，内容只有那句英文。带上的内容：
+后面的消息是这场英文对话，角色只有 `user` 和 `assistant`，内容只有那句英文。一场没有句数上限，记录里会一直留着全文。发给模型的稿子超过大约一万二千个英文字符时，更早的部分先收成一段英文「已经谈过什么」，只把最近 16 条原文放进这次请求。这段摘要会留在这场记录上，下次只补新掉出去的句子。摘要用的 system 是：
+
+```text
+You compress the earlier part of a spoken English practice.
+Write 2 to 4 short English sentences about what has already been talked about.
+Keep the concrete facts the learner said.
+If an earlier summary is included, carry its facts forward and add the new lines.
+Do not correct grammar. Do not give advice. Do not add a new question.
+```
+
+摘要请求失败，或回来的不是英语时，改用更早几句的原文摘录，对话照样继续。带上的内容：
 
 - 对方的开场白和之后每一句回复。
 - 你自己说的英语。
@@ -77,10 +87,13 @@ You check one learner sentence for an English speaking practice.
 Learner level: A1. Use very common words. Every question should be answerable in a few words.
 Return JSON only: {"correction": null} or {"correction": {"original_span": "", "suggestion": "", "category": "", "explanation_zh": ""}}.
 Rules:
-- At most one correction, the most useful one at this level.
-- If the meaning is already clear enough, return null.
-- suggestion is a full natural sentence the learner can say next.
-- explanation_zh is one short Chinese sentence, not a grammar lecture.
+- Fix every problem in the sentence. Do not stop after the first one.
+- suggestion is the whole sentence rewritten in natural spoken English, with every problem fixed.
+- Stay within the learner's level. Repair the sentence; do not make it fancier.
+- If the sentence is already natural, return null.
+- original_span is the learner's whole sentence.
+- explanation_zh is one or two short Chinese sentences naming what was wrong, not a grammar lecture.
+- category is the main kind of problem. If several were fixed, choose the one that most changed the meaning.
 - category is one of: article, tense, agreement, word_choice, word_order, politeness, other.
 - Do not comment on sentences that were supplied as a model line.
 ```
@@ -151,6 +164,7 @@ Rules:
 - keep_sentence is one English sentence from this scene worth saying again. Prefer an assisted line, otherwise the corrected suggestion.
 - revised_from is the learner's own English that was corrected. Leave it empty when nothing was corrected.
 - Mention an assisted line as something to reuse without help.
+- If already_talked_about is present, it summarizes earlier turns. turns are only the later lines.
 - Do not give a grammar lecture.
 ```
 
@@ -167,7 +181,7 @@ Rules:
       "text": "it is really happy to sleep all day",
       "assisted": false,
       "correction": {
-        "original_span": "it is really happy",
+        "original_span": "it is really happy to sleep all day",
         "suggestion": "It was really nice to sleep all day.",
         "category": "word_choice",
         "explanation_zh": "形容休息舒服宜用 nice，且周末过去发生的事请用 was。"

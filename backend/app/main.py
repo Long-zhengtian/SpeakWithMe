@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from app.api.routes import phrases, sessions, settings as settings_routes, speech, system
+from app.api.routes import backup, phrases, sessions, settings as settings_routes, speech, system
 from app.config import Settings
 from app.container import apply_stored_llm, build_container
 from app.domain.errors import AppError
@@ -37,6 +37,7 @@ def create_app(settings=None):
         return RedirectResponse(target)
 
     app.include_router(system.router, prefix="/api/v1")
+    app.include_router(backup.router, prefix="/api/v1")
     app.include_router(settings_routes.router, prefix="/api/v1")
     app.include_router(phrases.router, prefix="/api/v1")
     app.include_router(sessions.router, prefix="/api/v1")

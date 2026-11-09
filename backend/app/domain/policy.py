@@ -2,9 +2,13 @@ import re
 
 MAX_MESSAGE_CHARS = 800
 MAX_INTENT_CHARS = 400
-MAX_USER_TURNS = 30
 MAX_REPLY_SENTENCES = 2
 MAX_CONTEXT_TURNS = 8
+# A practice can keep going. Past this much English, earlier lines are folded
+# into a short note and only the latest lines stay verbatim in the model request.
+CHAT_CONTEXT_CHARS = 12000
+CHAT_RECENT_MESSAGES = 16
+JSON_ATTEMPTS = 2
 
 
 def clean_reply(text):

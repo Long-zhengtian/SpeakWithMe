@@ -61,7 +61,6 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
       <header className="studio-top">
         <div>
           <h1>开一场</h1>
-          <p className="lede">选处境和水平。聊天只接话，指正在旁边，怎么说留到你问的时候。</p>
         </div>
         <button type="button" className="ghost" onClick={onBack}>
           返回练习
@@ -119,7 +118,7 @@ export function SetupScreen({ onStart, onBack }: SetupScreenProps) {
                   onClick={() => setCorrectionsEnabled(true)}
                 >
                   <strong>正常</strong>
-                  <span>一句最多改一处。</span>
+                  <span>每句都改成完整的一句。</span>
                 </button>
                 <button
                   type="button"

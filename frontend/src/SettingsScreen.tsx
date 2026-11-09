@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "./api/client";
 import type { LlmSettings } from "./types";
 
@@ -13,11 +13,15 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [filter, setFilter] = useState("");
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const modelPicker = useRef<HTMLDivElement>(null);
   const [clearApiKey, setClearApiKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const backupFile = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -48,6 +52,28 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
     return models.filter((item) => item.toLowerCase().includes(query));
   }, [filter, models]);
 
+  useEffect(() => {
+    if (!modelsOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node) || modelPicker.current?.contains(target)) return;
+      setModelsOpen(false);
+      setFilter("");
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setModelsOpen(false);
+        setFilter("");
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [modelsOpen]);
+
   function chooseProvider(nextId: string) {
     const item = saved?.providers.find((entry) => entry.id === nextId);
     setProvider(nextId);
@@ -55,6 +81,7 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
     setBaseUrl(item?.base_url ?? "");
     setApiKey("");
     setFilter("");
+    setModelsOpen(false);
     setClearApiKey(false);
     setNotice(null);
     setError(null);
@@ -71,7 +98,9 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       setModel(item?.model && item.models.includes(item.model) ? item.model : "");
       setApiKey("");
       setClearApiKey(false);
-      setNotice(item?.models.length ? `读到 ${item.models.length} 个模型。选一个再保存。` : "这个地址没有返回模型。");
+      const kept = Boolean(item?.model && item.models.includes(item.model));
+      setModelsOpen(Boolean(item?.models.length) && !kept);
+      setNotice(item?.models.length ? `读到 ${item.models.length} 个模型。` : "这个地址没有返回模型。");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "没有读到模型。");
     } finally {
@@ -102,6 +131,54 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       setError(err instanceof ApiError ? err.message : "没有保存。");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onExport() {
+    setMoving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const blob = await api.exportBackup();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const day = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `speak-with-me-${day}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("已经下载。这份文件里有练习、笔记本和密钥。");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "练习没有导出。");
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  async function onImport(file: File | undefined) {
+    if (!file) return;
+    setMoving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as unknown;
+      const result = await api.importBackup(payload);
+      const next = await api.settings();
+      setSaved(next);
+      setProvider(next.provider);
+      setModel(next.model);
+      setBaseUrl(next.base_url);
+      setApiKey("");
+      setClearApiKey(false);
+      onKeyChange(next.api_key_set);
+      const settingsNote = result.settings ? "密钥也一起带回了。" : "";
+      setNotice(`带回 ${result.sessions} 场练习、${result.phrases} 条笔记。${settingsNote}`);
+    } catch (err) {
+      setError(err instanceof SyntaxError ? "这个文件读不了。" : err instanceof ApiError ? err.message : "练习没有导入。");
+    } finally {
+      if (backupFile.current) backupFile.current.value = "";
+      setMoving(false);
     }
   }
 
@@ -201,37 +278,93 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
                 {saving ? "正在保存…" : "保存"}
               </button>
             </div>
-            <label htmlFor="model-filter">模型</label>
-            <input
-              id="model-filter"
-              type="text"
-              value={filter}
-              placeholder={models.length ? "筛选模型" : "读取之后会出现在这里"}
-              onChange={(event) => setFilter(event.target.value)}
-            />
-            {models.length === 0 ? (
-              <p className="muted">还没有读到模型。</p>
-            ) : visibleModels.length === 0 ? (
-              <p className="muted">没有符合筛选的模型。</p>
-            ) : (
-              <div className="model-list" data-testid="model-list">
-                {visibleModels.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className="model-row"
-                    aria-pressed={item === model}
-                    onClick={() => setModel(item)}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className={`model-picker${modelsOpen ? " open" : ""}`} ref={modelPicker}>
+              <label htmlFor="model-filter">模型</label>
+              {modelsOpen ? (
+                <input
+                  id="model-filter"
+                  className="model-query"
+                  type="text"
+                  value={filter}
+                  placeholder="筛选模型"
+                  autoFocus
+                  aria-expanded="true"
+                  aria-controls="model-list"
+                  onChange={(event) => setFilter(event.target.value)}
+                />
+              ) : (
+                <button
+                  id="model-filter"
+                  type="button"
+                  className="model-picker-value"
+                  data-testid="model-picker"
+                  aria-expanded="false"
+                  aria-controls="model-list"
+                  aria-label={model ? `模型 ${model}` : "选择模型"}
+                  disabled={models.length === 0}
+                  onClick={() => {
+                    setFilter("");
+                    setModelsOpen(true);
+                  }}
+                >
+                  <span>{model || (models.length ? "选择模型" : "读取之后会出现在这里")}</span>
+                  <span className="model-chevron" aria-hidden="true">
+                    ▾
+                  </span>
+                </button>
+              )}
+              {modelsOpen ? (
+                visibleModels.length === 0 ? (
+                  <p className="muted model-empty">没有符合筛选的模型。</p>
+                ) : (
+                  <div className="model-list" id="model-list" role="listbox" data-testid="model-list">
+                    {visibleModels.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        className="model-row"
+                        role="option"
+                        aria-selected={item === model}
+                        onClick={() => {
+                          setModel(item);
+                          setFilter("");
+                          setModelsOpen(false);
+                        }}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                )
+              ) : null}
+            </div>
             {notice ? <p data-testid="settings-notice">{notice}</p> : null}
           </div>
         </form>
       )}
+      <section className="panel backup-panel">
+        <h2>换设备</h2>
+        <p className="muted">导出一份文件，到另一台电脑或手机上导入，练习和笔记本会按原来的日期接上。同编号的记录用文件里的版本，文件里没有的记录留在这台设备上。</p>
+        <div className="settings-actions">
+          <button type="button" className="ghost" data-testid="export-backup" disabled={moving} onClick={() => void onExport()}>
+            导出练习
+          </button>
+          <button type="button" className="primary" data-testid="choose-backup" disabled={moving} onClick={() => backupFile.current?.click()}>
+            导入练习
+          </button>
+          <input
+            ref={backupFile}
+            type="file"
+            accept="application/json,.json"
+            data-testid="import-backup"
+            hidden
+            onChange={(event) => void onImport(event.target.files?.[0])}
+          />
+        </div>
+        {notice && (notice.startsWith("已经下载") || notice.startsWith("带回")) ? (
+          <p data-testid="backup-notice">{notice}</p>
+        ) : null}
+      </section>
     </main>
   );
 }

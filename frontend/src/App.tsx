@@ -18,6 +18,12 @@ type Screen =
   | { name: "talk"; session: Session; back: ReturnTo }
   | { name: "review"; session: Session; back: ReturnTo };
 
+function showScreen(next: Screen, mode: "push" | "replace") {
+  const state = { speak: next };
+  if (mode === "push") history.pushState(state, "");
+  else history.replaceState(state, "");
+}
+
 export function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   const [hasKey, setHasKey] = useState<boolean | null>(null);
@@ -38,8 +44,28 @@ export function App() {
     };
   }, []);
 
-  function leaveTo(back: ReturnTo) {
-    setScreen(back === "records" ? { name: "records" } : { name: "home" });
+  useEffect(() => {
+    history.replaceState({ speak: { name: "home" } satisfies Screen }, "");
+    function onPop(event: PopStateEvent) {
+      const next = (event.state as { speak?: Screen } | null)?.speak;
+      if (next?.name) setScreen(next);
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  function goBack() {
+    const state = history.state as { overlay?: string; speak?: Screen } | null;
+    if (state?.overlay || (state?.speak && state.speak.name !== "home")) {
+      history.back();
+      return;
+    }
+    setScreen({ name: "home" });
+  }
+
+  function show(next: Screen, mode: "push" | "replace") {
+    setScreen(next);
+    showScreen(next, mode);
   }
 
   async function openRecord(sessionId: string, finished: boolean) {
@@ -47,21 +73,22 @@ export function App() {
     try {
       const session = await api.session(sessionId);
       const back: ReturnTo = "records";
-      setScreen(finished || session.finished_at ? { name: "review", session, back } : { name: "talk", session, back });
+      show(finished || session.finished_at ? { name: "review", session, back } : { name: "talk", session, back }, "push");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "这场记录没有打开。");
     }
   }
 
   function openLibrary(page: LibraryPage) {
-    setScreen({ name: page });
+    if (screen.name === page) return;
+    show({ name: page }, "push");
   }
 
   if (screen.name === "setup") {
     return (
       <SetupScreen
-        onBack={() => setScreen({ name: "home" })}
-        onStart={(session) => setScreen({ name: "talk", session, back: "home" })}
+        onBack={goBack}
+        onStart={(session) => show({ name: "talk", session, back: "home" }, "replace")}
       />
     );
   }
@@ -70,7 +97,7 @@ export function App() {
       <ConversationScreen
         session={screen.session}
         exitLabel={screen.back === "records" ? "返回记录" : "返回练习"}
-        onExit={() => leaveTo(screen.back)}
+        onExit={goBack}
       />
     );
   }
@@ -79,10 +106,10 @@ export function App() {
       <ReviewScreen
         session={screen.session}
         backLabel={screen.back === "records" ? "返回记录" : "返回练习"}
-        onBack={() => leaveTo(screen.back)}
+        onBack={goBack}
         canPractice={hasKey === true}
-        onPractice={() => setScreen({ name: "setup" })}
-        onStarted={(session) => setScreen({ name: "talk", session, back: "records" })}
+        onPractice={() => show({ name: "setup" }, "push")}
+        onStarted={(session) => show({ name: "talk", session, back: "records" }, "replace")}
       />
     );
   }
@@ -95,7 +122,7 @@ export function App() {
       {page === "records" ? <RecordsScreen onOpen={(id, finished) => void openRecord(id, finished)} /> : null}
       {page === "phrases" ? <PhrasesScreen /> : null}
       {page === "settings" ? <SettingsScreen onKeyChange={setHasKey} /> : null}
-      {page === "home" ? <HomeScreen hasKey={hasKey} onPractice={() => setScreen({ name: "setup" })} /> : null}
+      {page === "home" ? <HomeScreen hasKey={hasKey} onPractice={() => show({ name: "setup" }, "push")} /> : null}
     </AppShell>
   );
 }

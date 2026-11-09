@@ -90,9 +90,41 @@ class SqliteSessionRepository(SessionRepository):
                 connection.close()
         return session
 
+    def replace_session(self, session):
+        if not session.updated_at:
+            session.updated_at = now_iso()
+        payload = session.model_dump_json()
+        with self._lock:
+            connection = self._connect()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO sessions (id, updated_at, payload)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        updated_at = excluded.updated_at,
+                        payload = excluded.payload
+                    """,
+                    (session.id, session.updated_at, payload),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+        return session
+
     def list_sessions(self):
         rows = self._read("SELECT payload FROM sessions ORDER BY updated_at DESC")
         return [Session.model_validate_json(row["payload"]) for row in rows]
+
+    def delete_session(self, session_id):
+        with self._lock:
+            connection = self._connect()
+            try:
+                cursor = connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+                connection.commit()
+                return cursor.rowcount > 0
+            finally:
+                connection.close()
 
     def list_phrases(self):
         rows = self._read("SELECT payload FROM phrases ORDER BY created_at DESC")

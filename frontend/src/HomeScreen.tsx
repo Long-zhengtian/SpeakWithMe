@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, api } from "./api/client";
-import { formatWhen } from "./lib/time";
-import type { Profile } from "./types";
+import { RadarScore } from "./RadarScore";
+import type { DayScore, Phrase, Profile, SessionScore } from "./types";
 
 type HomeScreenProps = {
   hasKey: boolean | null;
@@ -10,6 +10,7 @@ type HomeScreenProps = {
 
 export function HomeScreen({ hasKey, onPractice }: HomeScreenProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [phrases, setPhrases] = useState<Phrase[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,6 +24,14 @@ export function HomeScreen({ hasKey, onPractice }: HomeScreenProps) {
         if (!alive) return;
         setError(err instanceof ApiError ? err.message : "练习记录没有加载出来。");
       });
+    api
+      .phrases()
+      .then((next) => {
+        if (alive) setPhrases(next);
+      })
+      .catch(() => {
+        if (alive) setPhrases([]);
+      });
     return () => {
       alive = false;
     };
@@ -33,7 +42,6 @@ export function HomeScreen({ hasKey, onPractice }: HomeScreenProps) {
       <header className="home-top">
         <div>
           <h1>练习</h1>
-          <p className="lede">看上一场留下的一句，然后开始下一场。模型和密钥在「设置」里。</p>
           {hasKey === false ? <p className="lede">模型还没接上。到「设置」里选一个来源。</p> : null}
         </div>
         <button
@@ -54,76 +62,87 @@ export function HomeScreen({ hasKey, onPractice }: HomeScreenProps) {
       {!profile ? (
         <p className="muted">{error ? "检查后端是否在 8000 端口。" : "正在整理记录…"}</p>
       ) : (
-        <>
-          <section className="stat-row" data-testid="profile-stats">
-            <article data-testid="session-count">
-              <strong>{profile.stats.sessions}</strong>
-              <span>场练习</span>
-            </article>
-            <article>
-              <strong>{profile.stats.user_turns}</strong>
-              <span>句自己说的</span>
-            </article>
-            <article>
-              <strong>{profile.stats.corrections}</strong>
-              <span>处指正</span>
-            </article>
-            <article>
-              <strong>{profile.stats.assisted_turns}</strong>
-              <span>句借助说的</span>
-            </article>
-          </section>
-          <div className="home-grid">
-            <section className="panel feedback">
-              <h2>上一场反馈</h2>
-              {profile.latest_feedback ? (
-                <div data-testid="latest-feedback">
-                  <p className="scene-kicker">
-                    {profile.latest_feedback.scene_title_zh} · {formatWhen(profile.latest_feedback.finished_at)}
-                  </p>
-                  <ul>
-                    {profile.latest_feedback.went_well.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                  <p className="try-next">{profile.latest_feedback.try_next}</p>
-                  {profile.latest_feedback.keep_sentence ? <p>留下这句：{profile.latest_feedback.keep_sentence}</p> : null}
-                  {profile.latest_feedback.revised_from ? (
-                    <p>你当时说的是：{profile.latest_feedback.revised_from}</p>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="muted">结束一场之后，这里会留下一句下次可以自己说的话。</p>
-              )}
-              {profile.focus.length > 0 ? (
-                <div className="focus-row">
-                  {profile.focus.map((item) => (
-                    <span key={item.category}>
-                      {item.label_zh} · {item.count}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-            <section className="panel">
-              <h2>最近的指正</h2>
-              {profile.recent_corrections.length === 0 ? (
-                <p className="muted">还没有要改的句子。</p>
-              ) : (
-                <ul className="note-list">
-                  {profile.recent_corrections.map((note) => (
-                    <li key={`${note.scene_title_zh}-${note.suggestion}`}>
-                      <span>{note.label_zh}</span>
-                      <strong>{note.suggestion}</strong>
-                      <em>{note.explanation_zh}</em>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          </div>
-        </>
+        <ProgressPanel profile={profile} phrases={phrases} />
       )}
     </main>
   );
+}
+
+function ProgressPanel({ profile, phrases }: { profile: Profile; phrases: Phrase[] }) {
+  const progress = profile.progress;
+  const days = progress?.days ?? [];
+  const today = days.find((day) => day.today);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const selected = days.find((day) => day.date === selectedDate && day.score !== null) ?? today;
+  const sentences = phrases.filter((item) => item.kind === "sentence");
+  const words = phrases.filter((item) => item.kind !== "sentence");
+  const mastered = (items: Phrase[]) => items.filter((item) => item.learning_status === "mastered").length;
+  const streak =
+    !progress || progress.streak === 0
+      ? "还没接上连续练习"
+      : progress.spoke_today
+        ? `连续 ${progress.streak} 天`
+        : `连续 ${progress.streak} 天，今天还没开口`;
+  const selectedScore: SessionScore | null =
+    selected && selected.score !== null ? { total: selected.score, dimensions: selected.dimensions } : null;
+  return (
+    <section className="panel progress" data-testid="progress">
+      <h2>进步</h2>
+      <div className="today-score">
+        {selectedScore ? <RadarScore score={selectedScore} testId="day-score" /> : null}
+        <div>
+          <p className="progress-summary">
+            <strong>{dayHeading(selected)}</strong>
+            <span>{streak}</span>
+            <span>一共练过 {progress?.practice_days ?? 0} 天</span>
+            {progress && progress.best > progress.streak ? <span>最长连续 {progress.best} 天</span> : null}
+          </p>
+          {selected?.summary ? <p className="day-summary">{selected.summary}</p> : null}
+        </div>
+      </div>
+      <div className="day-strip" aria-label="最近十四天的评分">
+        {days.map((mark) => {
+          const chosen = selected?.date === mark.date;
+          return (
+            <button
+              key={mark.date}
+              type="button"
+              className={`day-col${mark.today ? " today" : ""}${chosen ? " selected" : ""}`}
+              data-testid={`day-${mark.date}`}
+              disabled={mark.score === null}
+              aria-pressed={chosen}
+              aria-label={mark.score === null ? `${mark.label}，没练` : `${mark.label}，${mark.score} 分`}
+              onClick={() => setSelectedDate(mark.date)}
+            >
+              <span className="day-meter">
+                {mark.score !== null ? <span className="day-num">{mark.score}</span> : null}
+                <span
+                  className={`day-bar${mark.score !== null ? " on" : ""}`}
+                  style={{ height: mark.score === null ? 4 : Math.max(8, Math.round((mark.score / 100) * 52)) }}
+                />
+              </span>
+              <em>{mark.label}</em>
+            </button>
+          );
+        })}
+      </div>
+      {sentences.length > 0 || words.length > 0 ? (
+        <p className="muted notebook-progress">
+          {`笔记本里，${[
+            sentences.length > 0 ? `句子已学会 ${mastered(sentences)}/${sentences.length}` : "",
+            words.length > 0 ? `词已学会 ${mastered(words)}/${words.length}` : "",
+          ]
+            .filter(Boolean)
+            .join("，")}。`}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function dayHeading(day: DayScore | undefined) {
+  if (!day || day.score === null) return "今天还没开口";
+  if (day.today) return `今天 ${day.score}`;
+  const [, month, date] = day.date.split("-");
+  return `${Number(month)}/${Number(date)} ${day.score}`;
 }

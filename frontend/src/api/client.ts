@@ -1,3 +1,6 @@
+import { localApi } from "../engine/practice";
+import { EngineError } from "../engine/text";
+import { store } from "../engine/store";
 import type {
   Catalog,
   ChatMessage,
@@ -22,170 +25,91 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  let response: Response;
-  try {
-    response = await fetch(path, { ...init, headers });
-  } catch {
-    throw new ApiError(0, "offline", "没有连上服务。先在 backend 目录启动 API。");
-  }
-  if (!response.ok) {
-    let code = "request_failed";
-    let message = "请求没有成功。";
-    try {
-      const body = await response.json();
-      const detail = body.detail;
-      if (detail && typeof detail === "object" && !Array.isArray(detail)) {
-        code = detail.code ?? code;
-        message = detail.message ?? message;
-      } else if (typeof detail === "string") {
-        message = detail;
-      } else if (Array.isArray(detail)) {
-        message = "有一项内容没填对。";
+let migration: Promise<void> | null = null;
+
+function migrateOnce() {
+  migration ??= (async () => {
+    const done = await store.get<boolean>("meta", "migrated");
+    if (done) return;
+    const existing = await store.all("sessions");
+    if (!existing.length) {
+      try {
+        const response = await fetch("/api/v1/backup", { signal: AbortSignal.timeout(1500) });
+        if (response.ok) {
+          const body = await response.json();
+          if (body && body.format === "speak-with-me-backup") await localApi.importBackup(body);
+        }
+      } catch {
+        /* The previous Python service is not running. The app keeps its own copy. */
       }
-    } catch {
-      message = response.statusText || message;
     }
-    throw new ApiError(response.status, code, message);
+    await store.put("meta", "migrated", true);
+  })();
+  return migration;
+}
+
+async function call<T>(run: () => Promise<T>) {
+  await migrateOnce();
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof EngineError || error instanceof ApiError) {
+      throw new ApiError(error.status, error.code, error.message);
+    }
+    throw new ApiError(500, "request_failed", "请求没有成功。");
   }
-  return response.json() as Promise<T>;
 }
 
 export const api = {
-  catalog() {
-    return request<Catalog>("/api/v1/catalog");
-  },
-  profile() {
-    return request<Profile>("/api/v1/profile");
-  },
-  settings() {
-    return request<LlmSettings>("/api/v1/settings");
-  },
-  saveSettings(input: {
-    provider: string;
-    baseUrl: string;
-    model: string;
-    apiKey: string;
-    clearApiKey: boolean;
-  }) {
-    return request<LlmSettings>("/api/v1/settings", {
-      method: "PUT",
-      body: JSON.stringify({
-        provider: input.provider,
-        base_url: input.baseUrl,
-        model: input.model,
-        api_key: input.apiKey,
-        clear_api_key: input.clearApiKey,
-      }),
-    });
-  },
-  listModels(input: { provider: string; baseUrl: string; apiKey: string }) {
-    return request<LlmSettings>("/api/v1/settings/models", {
-      method: "POST",
-      body: JSON.stringify({
-        provider: input.provider,
-        base_url: input.baseUrl,
-        api_key: input.apiKey,
-      }),
-    });
-  },
-  testSettings(input: {
-    provider: string;
-    baseUrl: string;
-    model: string;
-    apiKey: string;
-    clearApiKey: boolean;
-  }) {
-    return request<{ ok: boolean; message: string }>("/api/v1/settings/test", {
-      method: "POST",
-      body: JSON.stringify({
-        provider: input.provider,
-        base_url: input.baseUrl,
-        model: input.model,
-        api_key: input.apiKey,
-        clear_api_key: input.clearApiKey,
-      }),
-    });
-  },
-  forkSession(sessionId: string, throughMessageId = "") {
-    return request<Session>(`/api/v1/sessions/${sessionId}/fork`, {
-      method: "POST",
-      body: JSON.stringify({ through_message_id: throughMessageId }),
-    });
-  },
-  session(sessionId: string) {
-    return request<Session>(`/api/v1/sessions/${sessionId}`);
-  },
-  createSession(input: { sceneId?: string; level: string; situationZh?: string; correctionsEnabled?: boolean }) {
-    return request<Session>("/api/v1/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        scene_id: input.sceneId ?? "",
-        level: input.level,
-        situation_zh: input.situationZh ?? "",
-        corrections_enabled: input.correctionsEnabled ?? true,
-      }),
-    });
-  },
-  gloss(text: string) {
-    return request<Gloss>("/api/v1/glossary", {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    });
-  },
-  phrases() {
-    return request<Phrase[]>("/api/v1/phrases");
-  },
-  savePhrase(text: string, glossZh: string, kind: "word" | "sentence") {
-    return request<Phrase>("/api/v1/phrases", {
-      method: "POST",
-      body: JSON.stringify({ text, gloss_zh: glossZh, kind }),
-    });
-  },
-  deletePhrase(phraseId: string) {
-    return request<{ ok: boolean }>(`/api/v1/phrases/${phraseId}`, { method: "DELETE" });
-  },
-  sendMessage(sessionId: string, text: string, assisted: boolean) {
-    return request<{ user_message: ChatMessage; assistant_message: ChatMessage }>(
-      `/api/v1/sessions/${sessionId}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify({ text, assisted }),
-      },
-    );
-  },
-  correct(sessionId: string, messageId: string) {
-    return request<{ message_id: string; correction: Correction | null; correction_status: string }>(
-      `/api/v1/sessions/${sessionId}/messages/${messageId}/correction`,
-      { method: "POST" },
-    );
-  },
-  coach(sessionId: string, intentZh: string, variant = 0) {
-    return request<CoachLine>(`/api/v1/sessions/${sessionId}/coach`, {
-      method: "POST",
-      body: JSON.stringify({ intent_zh: intentZh, variant }),
-    });
-  },
-  recap(sessionId: string) {
-    return request<Recap>(`/api/v1/sessions/${sessionId}/recap`, { method: "POST" });
-  },
-  // Server speech slots. Playback in v1 uses the browser voice until a provider is registered.
+  catalog: () => call(() => localApi.catalog() as Promise<Catalog>),
+  profile: () => call(() => localApi.profile() as Promise<Profile>),
+  settings: () => call(() => localApi.settings() as Promise<LlmSettings>),
+  saveSettings: (input: { provider: string; baseUrl: string; model: string; apiKey: string; clearApiKey: boolean }) =>
+    call(() => localApi.saveSettings(input) as Promise<LlmSettings>),
+  listModels: (input: { provider: string; baseUrl: string; apiKey: string }) =>
+    call(() => localApi.listModels(input) as Promise<LlmSettings>),
+  testSettings: (input: { provider: string; baseUrl: string; model: string; apiKey: string; clearApiKey: boolean }) =>
+    call(() => localApi.testSettings(input)),
+  forkSession: (sessionId: string, throughMessageId = "") => call(() => localApi.forkSession(sessionId, throughMessageId) as Promise<Session>),
+  session: (sessionId: string) => call(() => localApi.session(sessionId) as Promise<Session>),
+  renameSession: (sessionId: string, titleZh: string) => call(() => localApi.renameSession(sessionId, titleZh) as Promise<Session>),
+  deleteSession: (sessionId: string) => call(() => localApi.deleteSession(sessionId)),
+  createSession: (input: { sceneId?: string; level: string; situationZh?: string; correctionsEnabled?: boolean }) =>
+    call(() => localApi.createSession(input) as Promise<Session>),
+  gloss: (text: string) => call(() => localApi.gloss(text) as Promise<Gloss>),
+  phrases: () => call(() => localApi.phrases() as Promise<Phrase[]>),
+  savePhrase: (text: string, glossZh: string, kind: "word" | "sentence") =>
+    call(() => localApi.savePhrase(text, glossZh, kind) as Promise<Phrase>),
+  deletePhrase: (phraseId: string) => call(() => localApi.deletePhrase(phraseId)),
+  exportBackup: () => call(() => localApi.exportBackup()),
+  importBackup: (payload: unknown) => call(() => localApi.importBackup(payload)),
+  setPhraseStatus: (phraseId: string, learningStatus: "learning" | "mastered") =>
+    call(() => localApi.setPhraseStatus(phraseId, learningStatus) as Promise<Phrase>),
+  sendMessage: (sessionId: string, text: string, assisted: boolean) =>
+    call(
+      () =>
+        localApi.sendMessage(sessionId, text, assisted) as Promise<{
+          user_message: ChatMessage;
+          assistant_message: ChatMessage;
+        }>,
+    ),
+  correct: (sessionId: string, messageId: string) =>
+    call(
+      () =>
+        localApi.correct(sessionId, messageId) as Promise<{
+          message_id: string;
+          correction: Correction | null;
+          correction_status: string;
+        }>,
+    ),
+  coach: (sessionId: string, intentZh: string, variant = 0) => call(() => localApi.coach(sessionId, intentZh, variant) as Promise<CoachLine>),
+  recap: (sessionId: string) => call(() => localApi.recap(sessionId) as Promise<Recap>),
   speech: {
-    transcribe(file: Blob) {
-      const body = new FormData();
-      body.append("file", file, "speech.webm");
-      return fetch("/api/v1/speech/transcribe", { method: "POST", body });
+    transcribe(_file: Blob) {
+      return Promise.resolve(new Response(JSON.stringify({ detail: { message: "语音识别用的是这台设备自己的。" } }), { status: 501 }));
     },
-    synthesize(text: string, voice = "partner") {
-      return fetch("/api/v1/speech/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice }),
-      });
+    synthesize(_text: string, _voice = "partner") {
+      return Promise.resolve(new Response(JSON.stringify({ detail: { message: "朗读用的是这台设备自己的。" } }), { status: 501 }));
     },
   },
 };

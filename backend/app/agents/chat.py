@@ -1,3 +1,4 @@
+from app.agents.context import fold_transcript
 from app.agents.prompts import chat_system
 from app.domain.errors import AppError
 from app.domain.policy import ensure_partner_english
@@ -15,10 +16,20 @@ class ChatAgent(object):
         scene = scene_for(session)
         if scene is None or level is None:
             raise AppError(500, "scene_missing", "这场对话的场景丢了。")
-        messages = [{"role": message.role, "content": message.text} for message in session.messages]
+        recent, covered = await fold_transcript(self.llm, session)
+        messages = [{"role": message.role, "content": message.text} for message in recent]
+        system = chat_system(scene, level)
+        if covered:
+            system = "\n".join(
+                [
+                    system,
+                    "Already talked about: %s" % covered,
+                    "Continue from the latest lines. Do not restart the scene.",
+                ]
+            )
         try:
             raw = await self.llm.complete(
-                system=chat_system(scene, level),
+                system=system,
                 messages=messages,
                 task=self.name,
                 response_format="text",

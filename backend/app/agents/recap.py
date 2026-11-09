@@ -1,6 +1,7 @@
 import json
 
-from app.agents.jsonutil import parse_json_object
+from app.agents.context import fold_transcript
+from app.agents.jsonutil import BadJson, complete_json
 from app.agents.prompts import recap_system
 from app.domain.errors import AppError
 from app.domain.models import Recap
@@ -14,8 +15,15 @@ class RecapAgent(object):
         self.llm = llm
 
     async def summarize(self, session):
+        _recent, covered = await fold_transcript(self.llm, session)
+        covered_id = session.folded_until_id
+        visible = session.messages
+        if covered and covered_id:
+            index = next((i for i, item in enumerate(session.messages) if item.id == covered_id), None)
+            if index is not None:
+                visible = session.messages[index + 1 :]
         turns = []
-        for message in session.messages:
+        for message in visible:
             item = {
                 "role": message.role,
                 "text": message.text,
@@ -24,17 +32,23 @@ class RecapAgent(object):
             if message.correction is not None:
                 item["correction"] = message.correction.model_dump()
             turns.append(item)
-        payload = {"scene_id": session.scene_id, "level": session.level, "turns": turns}
+        payload = {
+            "scene_id": session.scene_id,
+            "level": session.level,
+            "already_talked_about": covered,
+            "turns": turns,
+        }
         try:
-            raw = await self.llm.complete(
-                system=recap_system(),
-                messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-                task=self.name,
-                response_format="json",
+            data = await complete_json(
+                self.llm,
+                recap_system(),
+                [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+                self.name,
             )
+        except BadJson:
+            data = {}
         except LLMError:
             raise AppError(502, "llm_unavailable", "小结暂时没有生成，再试一次。")
-        data = parse_json_object(raw)
         went = data.get("went_well")
         if not isinstance(went, list):
             went = []

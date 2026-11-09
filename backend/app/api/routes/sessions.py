@@ -6,6 +6,7 @@ from app.api.schemas import (
     CorrectionResponse,
     CreateSessionBody,
     ForkBody,
+    RenameBody,
     SendMessageBody,
     SendMessageResponse,
     SessionPublic,
@@ -32,6 +33,18 @@ async def create_session(body: CreateSessionBody, container=Depends(get_containe
 async def fork_session(session_id: str, body: ForkBody, container=Depends(get_container)):
     session = await container.sessions.fork_session(session_id, body.through_message_id)
     return session_public(session)
+
+
+@router.patch("/{session_id}", response_model=SessionPublic)
+def rename_session(session_id: str, body: RenameBody, container=Depends(get_container)):
+    session = container.sessions.rename_session(session_id, body.title_zh)
+    return session_public(session)
+
+
+@router.delete("/{session_id}")
+def delete_session(session_id: str, container=Depends(get_container)):
+    container.sessions.delete_session(session_id)
+    return {"ok": True}
 
 
 @router.get("/{session_id}", response_model=SessionPublic)

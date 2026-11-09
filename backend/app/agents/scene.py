@@ -1,6 +1,6 @@
 import json
 
-from app.agents.jsonutil import parse_json_object
+from app.agents.jsonutil import BadJson, complete_json
 from app.agents.prompts import scene_system
 from app.domain.errors import AppError
 from app.domain.models import CustomScene
@@ -16,15 +16,16 @@ class SceneAgent(object):
     async def build(self, situation_zh, level):
         payload = {"situation_zh": situation_zh, "level": level.id}
         try:
-            raw = await self.llm.complete(
-                system=scene_system(),
-                messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-                task=self.name,
-                response_format="json",
+            data = await complete_json(
+                self.llm,
+                scene_system(),
+                [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+                self.name,
             )
+        except BadJson:
+            data = {}
         except LLMError:
             raise AppError(502, "llm_unavailable", "这场场景暂时没有准备好，再试一次。")
-        data = parse_json_object(raw)
         opening = str(data.get("opening") or "").strip() or "Hi. What happened?"
         return CustomScene(
             title_zh=str(data.get("title_zh") or "").strip() or "自己的一场",

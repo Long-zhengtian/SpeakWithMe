@@ -79,6 +79,36 @@ export type Recap = {
   revised_from: string;
 };
 
+export type ScoreDimension = {
+  id: string;
+  label_zh: string;
+  score: number;
+};
+
+export type SessionScore = {
+  total: number;
+  dimensions: ScoreDimension[];
+};
+
+export type DayScore = {
+  date: string;
+  label: string;
+  today: boolean;
+  sessions: number;
+  turns: number;
+  score: number | null;
+  summary: string;
+  dimensions: ScoreDimension[];
+};
+
+export type PracticeProgress = {
+  streak: number;
+  best: number;
+  practice_days: number;
+  spoke_today: boolean;
+  days: DayScore[];
+};
+
 export type Profile = {
   stats: {
     sessions: number;
@@ -103,6 +133,8 @@ export type Profile = {
     revised_from: string;
   } | null;
   records: PracticeRecord[];
+  activity: { at: string }[];
+  progress?: PracticeProgress;
 };
 
 export type PracticeRecord = {
@@ -117,6 +149,7 @@ export type PracticeRecord = {
   assisted_turns: number;
   try_next: string | null;
   preview: string;
+  score?: SessionScore | null;
 };
 
 export type Gloss = {
@@ -133,4 +166,5 @@ export type Phrase = {
   text: string;
   gloss_zh: string;
   created_at: string;
+  learning_status?: "learning" | "mastered" | string;
 };

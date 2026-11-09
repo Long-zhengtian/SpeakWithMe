@@ -77,6 +77,9 @@ def test_chat_stays_in_english_and_correction_is_separate():
     assert again.json() == corrected.json()
     correction_calls = [call for call in app.state.container.llm.calls if call["task"] == "correction"]
     assert len(correction_calls) == 1
+    assert "Fix every problem" in correction_calls[0]["system"]
+    assert "At most one correction" not in correction_calls[0]["system"]
+    assert corrected.json()["correction"]["original_span"] == "I want coffee"
 
 
 def test_chinese_coach_request_never_enters_the_chat():
@@ -168,6 +171,12 @@ def test_profile_keeps_practice_records_and_feedback():
     assert profile["focus"][0]["label_zh"] == "说法"
     assert "I'd like a coffee, please." in profile["latest_feedback"]["try_next"]
     assert profile["records"][0]["scene_title_zh"] == "咖啡店点单"
+    assert profile["records"][0]["score"]["total"] >= 0
+    assert {item["id"] for item in profile["records"][0]["score"]["dimensions"]} >= {"vocabulary", "interaction"}
+    assert len(profile["progress"]["days"]) == 14
+    assert profile["progress"]["days"][-1]["today"] is True
+    assert "今天" in profile["progress"]["days"][-1]["summary"]
+    assert profile["activity"]
     assert profile["records"][0]["finished_at"]
     stored = client.get("/api/v1/sessions/%s" % session_id).json()
     assert stored["recap"]["try_next"] == profile["latest_feedback"]["try_next"]
@@ -282,6 +291,31 @@ def test_settings_keep_the_key_on_this_machine_and_hide_it(tmp_path, monkeypatch
     blocked = reloaded.post("/api/v1/sessions", json={"scene_id": "coffee_shop", "level": "A1"})
     assert blocked.status_code == 428
     assert blocked.json()["detail"]["message"] == "先在设置里填上 API key。"
+
+
+def test_a_practice_record_can_be_renamed_and_deleted():
+    client, _app = _client()
+    session_id = client.post("/api/v1/sessions", json={"scene_id": "weekend", "level": "A1"}).json()["id"]
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "I slept all day", "assisted": False},
+    )
+    assert sent.status_code == 200
+    renamed = client.patch("/api/v1/sessions/%s" % session_id, json={"title_zh": "周末补觉"})
+    assert renamed.status_code == 200
+    assert renamed.json()["scene"]["title_zh"] == "周末补觉"
+    records = client.get("/api/v1/profile").json()["records"]
+    assert records[0]["id"] == session_id
+    assert records[0]["scene_title_zh"] == "周末补觉"
+    blank = client.patch("/api/v1/sessions/%s" % session_id, json={"title_zh": "   "})
+    assert blank.status_code == 422
+    missing = client.delete("/api/v1/sessions/missing-session")
+    assert missing.status_code == 404
+    deleted = client.delete("/api/v1/sessions/%s" % session_id)
+    assert deleted.status_code == 200
+    assert client.get("/api/v1/sessions/%s" % session_id).status_code == 404
+    left = client.get("/api/v1/profile").json()["records"]
+    assert all(item["id"] != session_id for item in left)
 
 
 def test_sqlite_repository_reloads_a_session(tmp_path):
@@ -457,7 +491,114 @@ def test_a_word_can_be_saved_in_the_phrase_book(tmp_path):
     listed = reloaded.get("/api/v1/phrases")
     assert listed.status_code == 200
     assert listed.json()[0]["text"] == "latte"
+    assert listed.json()[0]["learning_status"] == "learning"
+    learned = reloaded.patch(
+        "/api/v1/phrases/%s" % saved.json()["id"],
+        json={"learning_status": "mastered"},
+    )
+    assert learned.status_code == 200
+    assert learned.json()["learning_status"] == "mastered"
     removed = reloaded.delete("/api/v1/phrases/%s" % saved.json()["id"])
     assert removed.status_code == 200
     assert reloaded.get("/api/v1/phrases").json() == []
+
+
+def test_a_practice_can_pass_thirty_user_turns():
+    from app.domain.models import Message, new_id
+
+    client, app = _client()
+    created = client.post("/api/v1/sessions", json={"scene_id": "weekend", "level": "A1"})
+    session_id = created.json()["id"]
+    repository = app.state.container.sessions.repository
+    session = repository.get(session_id)
+    for _ in range(30):
+        session.messages.append(Message(id=new_id(), role="user", text="I slept all day", correction_ready=True))
+        session.messages.append(Message(id=new_id(), role="assistant", text="Okay.", correction_ready=True))
+    repository.save(session)
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "I slept all day", "assisted": False},
+    )
+    assert sent.status_code == 200
+    stored = repository.get(session_id)
+    assert sum(1 for item in stored.messages if item.role == "user") == 31
+
+
+def test_a_long_transcript_is_folded_before_the_model_sees_it():
+    from app.domain.models import Message, new_id
+    from app.domain.policy import CHAT_RECENT_MESSAGES
+
+    client, app = _client()
+    created = client.post("/api/v1/sessions", json={"scene_id": "weekend", "level": "A1"})
+    session_id = created.json()["id"]
+    repository = app.state.container.sessions.repository
+    session = repository.get(session_id)
+    early = "I walked in the park and talked about the river. " * 20
+    for _ in range(18):
+        session.messages.append(Message(id=new_id(), role="user", text=early, correction_ready=True))
+        session.messages.append(Message(id=new_id(), role="assistant", text="Tell me more.", correction_ready=True))
+    repository.save(session)
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "Then I went home.", "assisted": False},
+    )
+    assert sent.status_code == 200
+    chat_calls = [call for call in app.state.container.llm.calls if call["task"] == "chat"]
+    assert len(chat_calls[-1]["messages"]) == CHAT_RECENT_MESSAGES
+    assert chat_calls[-1]["messages"][-1]["content"] == "Then I went home."
+    assert "Already talked about:" in chat_calls[-1]["system"]
+    assert "park" in chat_calls[-1]["system"]
+    stored = repository.get(session_id)
+    assert len(stored.messages) > CHAT_RECENT_MESSAGES
+    assert stored.folded_summary
+    assert "park" in stored.folded_summary
+
+
+def test_bad_json_is_asked_again_and_a_second_failure_is_kept():
+    client, app = _client()
+    session_id = client.post("/api/v1/sessions", json={"scene_id": "weekend", "level": "A1"}).json()["id"]
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "i slept all day", "assisted": False},
+    )
+    message_id = sent.json()["user_message"]["id"]
+    llm = app.state.container.llm
+    original = llm.complete
+    state = {"n": 0}
+
+    async def once_then_json(system, messages, task, response_format):
+        if task == "correction":
+            state["n"] += 1
+            if state["n"] == 1:
+                return "nope"
+            return '{"correction": null}'
+        return await original(system, messages, task, response_format)
+
+    llm.complete = once_then_json
+    corrected = client.post("/api/v1/sessions/%s/messages/%s/correction" % (session_id, message_id))
+    assert corrected.status_code == 200
+    assert state["n"] == 2
+    assert corrected.json()["correction_status"] == "clear"
+
+    state["n"] = 0
+
+    async def always_bad(system, messages, task, response_format):
+        if task == "correction":
+            state["n"] += 1
+            return "still nope"
+        return await original(system, messages, task, response_format)
+
+    llm.complete = always_bad
+    sent = client.post(
+        "/api/v1/sessions/%s/messages" % session_id,
+        json={"text": "I say I slept all day", "assisted": False},
+    )
+    message_id = sent.json()["user_message"]["id"]
+    failed = client.post("/api/v1/sessions/%s/messages/%s/correction" % (session_id, message_id))
+    assert failed.status_code == 502
+    assert state["n"] == 2
+    stored = app.state.container.sessions.get_session(session_id)
+    user = next(item for item in stored.messages if item.id == message_id)
+    assert user.correction_status == "failed"
+    assert user.correction_ready is False
 

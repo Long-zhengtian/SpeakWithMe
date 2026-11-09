@@ -12,7 +12,13 @@ class SessionRepository(object):
     def save(self, session):
         raise NotImplementedError
 
+    def replace_session(self, session):
+        raise NotImplementedError
+
     def list_sessions(self):
+        raise NotImplementedError
+
+    def delete_session(self, session_id):
         raise NotImplementedError
 
     def list_phrases(self):

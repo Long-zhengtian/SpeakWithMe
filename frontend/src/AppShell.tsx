@@ -5,7 +5,7 @@ export type LibraryPage = "home" | "records" | "phrases" | "settings";
 const pages: { id: LibraryPage; label: string; hint: string }[] = [
   { id: "home", label: "练习", hint: "从这里开一场" },
   { id: "records", label: "记录", hint: "回顾，或接着说" },
-  { id: "phrases", label: "句型", hint: "收下的词和句子" },
+  { id: "phrases", label: "笔记本", hint: "词和句子" },
   { id: "settings", label: "设置", hint: "模型和密钥" },
 ];
 

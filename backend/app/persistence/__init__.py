@@ -22,8 +22,17 @@ class MemorySessionRepository(SessionRepository):
         self._items[session.id] = session
         return session
 
+    def replace_session(self, session):
+        if not session.updated_at:
+            session.updated_at = now_iso()
+        self._items[session.id] = session
+        return session
+
     def list_sessions(self):
         return sorted(self._items.values(), key=lambda session: session.updated_at, reverse=True)
+
+    def delete_session(self, session_id):
+        return self._items.pop(session_id, None) is not None
 
     def list_phrases(self):
         return sorted(self._phrases.values(), key=lambda phrase: phrase.created_at, reverse=True)

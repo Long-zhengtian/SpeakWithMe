@@ -1,6 +1,7 @@
 from collections import Counter
 
 from app.domain.scenes import get_scene
+from app.domain.scoring import progress_calendar, score_session
 
 CATEGORY_LABELS = {
     "article": "冠词",
@@ -69,7 +70,21 @@ def build_profile(sessions):
         "recent_corrections": corrections[:6],
         "latest_feedback": latest_feedback,
         "records": [_record(session) for session in practiced[:30]],
+        "activity": _activity(practiced),
+        "progress": progress_calendar(practiced),
     }
+
+
+def _activity(sessions):
+    points = []
+    for session in sessions:
+        for message in session.messages:
+            if message.role != "user":
+                continue
+            at = (message.created_at or "").strip() or session.created_at
+            if at:
+                points.append({"at": at})
+    return points
 
 
 def _user_messages(session):
@@ -78,11 +93,17 @@ def _user_messages(session):
 
 def _scene_view(session):
     if session.custom_scene is not None:
-        return session.custom_scene.title_zh, session.custom_scene.partner_name
-    scene = get_scene(session.scene_id)
-    if scene is None:
-        return "已下线的场景", ""
-    return scene.title_zh, scene.partner_name
+        title, partner = session.custom_scene.title_zh, session.custom_scene.partner_name
+    else:
+        scene = get_scene(session.scene_id)
+        if scene is None:
+            title, partner = "已下线的场景", ""
+        else:
+            title, partner = scene.title_zh, scene.partner_name
+    override = (session.title_zh or "").strip()
+    if override:
+        title = override
+    return title, partner
 
 
 def _record(session):
@@ -103,4 +124,9 @@ def _record(session):
         "assisted_turns": sum(1 for message in users if message.assisted),
         "try_next": session.recap.try_next if session.recap is not None else None,
         "preview": preview,
+        "score": _public_score(score_session(session)),
     }
+
+
+def _public_score(result):
+    return {"total": result["total"], "dimensions": result["dimensions"]}
