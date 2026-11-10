@@ -3,7 +3,7 @@ export const MAX_INTENT_CHARS = 400;
 export const MAX_REPLY_SENTENCES = 2;
 export const MAX_CONTEXT_TURNS = 8;
 export const CHAT_CONTEXT_CHARS = 12000;
-export const CHAT_RECENT_MESSAGES = 16;
+export const CHAT_RECENT_MESSAGES = 8;
 export const JSON_ATTEMPTS = 2;
 
 export function cleanReply(text: string) {

@@ -7,6 +7,7 @@ import type { ChatMessage } from "./types";
 
 type MessageBubbleProps = {
   message: ChatMessage;
+  sessionId: string;
   partnerName: string;
   onWord: (word: string) => void;
   children?: ReactNode;
@@ -14,13 +15,13 @@ type MessageBubbleProps = {
 
 type MenuPlace = { top: number; left: number; below: boolean };
 
-export const MessageBubble = memo(function MessageBubble({ message, partnerName, onWord, children }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, sessionId, partnerName, onWord, children }: MessageBubbleProps) {
   const mine = message.role === "user";
   const extra = Children.toArray(children);
   const avatarRef = useRef<HTMLButtonElement | null>(null);
   const [menu, setMenu] = useState<MenuPlace | null>(null);
   const [open, setOpen] = useState(false);
-  const [chinese, setChinese] = useState("");
+  const [chinese, setChinese] = useState(message.translation_zh || "");
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -53,11 +54,15 @@ export const MessageBubble = memo(function MessageBubble({ message, partnerName,
   async function translate() {
     setMenu(null);
     setOpen(true);
+    if (message.translation_zh) {
+      setChinese(message.translation_zh);
+      return;
+    }
     if ((chinese && !failed) || loading) return;
     setLoading(true);
     setFailed(false);
     try {
-      setChinese(await api.translate(message.text));
+      setChinese(await api.translate(sessionId, message.id));
     } catch (error) {
       setFailed(true);
       setChinese(error instanceof ApiError ? error.message : "这句没有译出来。");

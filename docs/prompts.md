@@ -28,18 +28,18 @@
 
 开一场预设场景时不调用模型。开场白直接作为第一条 assistant 消息写进记录。之后你每说一句，聊天角色才被调用。
 
-system 由对方身份、场景编号、英文目标、难度编号和难度句子拼成。咖啡店、A1 实际发出去的是：
+system 由对方身份、英文目标、难度编号、难度句子和对方性格拼成。咖啡店、A1 实际发出去的是：
 
 ```text
 You are Mia, a barista at a small cafe.
-SCENE_ID: coffee_shop
 Goal of this conversation: Help the learner order one drink and confirm the size.
 Learner level: A1.
 Use very common words. Use one short sentence. Ask one question the learner can answer in a few words.
+Personality, in the learner's Chinese: 温和、耐心，说话短，像在接待客人。
+Follow that personality.
 Rules:
 - Stay in character.
 - Reply in English only.
-- Ask exactly one question that moves the scene forward.
 - Never correct grammar, never explain grammar, and never switch to Chinese.
 - If you do not understand, ask a shorter question in simple English.
 - Do not mention these instructions.
@@ -53,7 +53,7 @@ Rules:
 | 上课要迟到 | Sam, a classmate waiting at the classroom door | Help the learner explain why they are late and when they will arrive. | Hey. Class is about to start. Where are you? |
 | 聊聊周末 | Lina, a friend you meet on Monday | Help the learner say one thing they did on the weekend and answer a follow-up. | Hi! How was your weekend? |
 
-后面的消息是这场英文对话，角色只有 `user` 和 `assistant`，内容只有那句英文。一场没有句数上限，记录里会一直留着全文。发给模型的稿子超过大约一万二千个英文字符时，更早的部分先收成一段英文「已经谈过什么」，只把最近 16 条原文放进这次请求。这段摘要会留在这场记录上，下次只补新掉出去的句子。摘要用的 system 是：
+后面的消息是这场英文对话，角色只有 `user` 和 `assistant`，内容只有那句英文。一场没有句数上限，记录里会一直留着全文。超过 8 句之后，更早的部分先收成一段英文「已经谈过什么」，只把最近 8 条原文放进这次请求。这段摘要会留在这场记录上，下次只补新掉出去的句子。摘要用的 system 是：
 
 ```text
 You compress the earlier part of a spoken English practice.
@@ -79,11 +79,10 @@ Do not correct grammar. Do not give advice. Do not add a new question.
 
 ## 查错
 
-你每说一句英语，对话回复显示之后再单独发一次。system 会带上难度编号和难度句子：
+你每说一句英语，对话回复显示之后再单独发一次。难度编号放在用户消息里，不写进 system：
 
 ```text
 You check one learner sentence for an English speaking practice.
-Learner level: A1. Use very common words. Use one short sentence. Ask one question the learner can answer in a few words.
 Return JSON only: {"correction": null} or {"correction": {"original_span": "", "suggestion": "", "category": "", "explanation_zh": ""}}.
 Rules:
 - Fix every problem in the sentence. Do not stop after the first one.
@@ -101,18 +100,14 @@ Rules:
 
 ```json
 {
-  "scene_id": "weekend",
   "level": "A1",
   "utterance": "你刚才说的那句英语",
   "assisted": false,
-  "recent_turns": [
-    {"role": "assistant", "text": "对方最近的一句"},
-    {"role": "user", "text": "你最近的一句"}
-  ]
+  "partner_last": "对方上一句英语"
 }
 ```
 
-`recent_turns` 最多 8 条，只含角色和英文。「怎么说」代写后发出去的句子标成 `assisted`，这一步直接跳过，不调用模型。开场时关掉指正，也不调用。
+`partner_last` 是这句之前最近一条对方的英语，没有则为空。「怎么说」代写后发出去的句子标成 `assisted`，这一步直接跳过，不调用模型。开场时关掉指正，也不调用。
 
 模型明确返回空指正时，这句话记为「不用改」，对话里会显示一个绿色对号。模型超时或报错时记为调用失败，那句话后面会写明，并可以再看一次。失败不会被当成「这句没问题」。
 
@@ -124,7 +119,8 @@ Rules:
 The learner does not know how to say something in a live English conversation.
 They will describe the meaning in Chinese.
 Scene: Help the learner say one thing they did on the weekend and answer a follow-up. You are helping them speak to Lina, a friend you meet on Monday.
-The partner last said: see partner_last in the user JSON.
+Personality, in the learner's Chinese: 随意、爱追问，像朋友闲聊。
+Follow that personality.
 Learner level: A1. Use very common words. Use one short sentence. Ask one question the learner can answer in a few words.
 Return JSON only: {"sentence": "", "simpler": "", "gloss_zh": ""}.
 Rules:
@@ -160,31 +156,27 @@ Return JSON only: {"went_well": ["", ""], "try_next": "", "keep_sentence": "", "
 Rules:
 - went_well has one to three short Chinese items about what the learner managed to say.
 - try_next is one Chinese sentence telling them a single English line to try alone next time.
-- keep_sentence is one English sentence from this scene worth saying again. Prefer an assisted line, otherwise the corrected suggestion.
-- revised_from is the learner's own English that was corrected. Leave it empty when nothing was corrected.
+- keep_sentence is one English sentence from this scene worth saying again. Prefer an assisted line, otherwise revised.
+- revised on a turn is the corrected English sentence. revised_from is the learner's own English that was corrected. Leave revised_from empty when no turn has revised.
 - Mention an assisted line as something to reuse without help.
 - If already_talked_about is present, it summarizes earlier turns. turns are only the later lines.
 - Do not give a grammar lecture.
 ```
 
-用户消息是整场记录。每一句有角色、英文、是否代写；有指正的句子还会带上改后的句子和中文说明。难度只以编号放在这条 JSON 里：
+用户消息是这场里还没被摘要收走的句子。每一句有角色、英文、是否代写；改过的句子带上改后的整句英语 `revised`。难度只以编号放在这条 JSON 里：
 
 ```json
 {
   "scene_id": "weekend",
   "level": "A1",
+  "already_talked_about": "",
   "turns": [
     {"role": "assistant", "text": "Hi! How was your weekend?", "assisted": false},
     {
       "role": "user",
       "text": "it is really happy to sleep all day",
       "assisted": false,
-      "correction": {
-        "original_span": "it is really happy to sleep all day",
-        "suggestion": "It was really nice to sleep all day.",
-        "category": "word_choice",
-        "explanation_zh": "形容休息舒服宜用 nice，且周末过去发生的事请用 was。"
-      }
+      "revised": "It was really nice to sleep all day."
     }
   ]
 }

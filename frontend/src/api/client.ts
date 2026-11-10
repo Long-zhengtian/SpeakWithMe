@@ -94,7 +94,7 @@ export const api = {
     random?: boolean;
   }) => call(() => localApi.createSession(input) as Promise<Session>),
   gloss: (text: string) => call(() => localApi.gloss(text) as Promise<Gloss>),
-  translate: (text: string) => call(() => localApi.translate(text) as Promise<string>),
+  translate: (sessionId: string, messageId: string) => call(() => localApi.translate(sessionId, messageId) as Promise<string>),
   phrases: () => call(() => localApi.phrases() as Promise<Phrase[]>),
   savePhrase: (text: string, glossZh: string, kind: "word" | "sentence") =>
     call(() => localApi.savePhrase(text, glossZh, kind) as Promise<Phrase>),

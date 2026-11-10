@@ -461,6 +461,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
             <MessageBubble
               key={message.id}
               message={message}
+              sessionId={session.id}
               partnerName={session.scene.partner_name}
               onWord={lookup}
             >
@@ -536,9 +537,11 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
         <aside className={`rail${sheetOpen ? " sheet-open" : ""}`}>
           <div className="sheet-bar">
             <span className="sheet-grab" aria-hidden="true" />
-            <button type="button" className="ghost sheet-close" onClick={closeSheet}>
-              收起
-            </button>
+            {gloss ? null : (
+              <button type="button" className="ghost sheet-close" onClick={closeSheet}>
+                收起
+              </button>
+            )}
           </div>
           <div className="sheet-scroll">
           {gloss ? (

@@ -144,6 +144,7 @@ export function ReviewScreen({
             <MessageBubble
               key={message.id}
               message={message}
+              sessionId={session.id}
               partnerName={session.scene.partner_name}
               onWord={(word) => void lookup(word)}
             >

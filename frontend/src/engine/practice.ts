@@ -30,12 +30,10 @@ import {
 } from "./settings";
 import { store } from "./store";
 import {
-  CHAT_CONTEXT_CHARS,
   CHAT_RECENT_MESSAGES,
   cleanReply,
   EngineError,
   ensurePartnerEnglish,
-  MAX_CONTEXT_TURNS,
   MAX_INTENT_CHARS,
   MAX_MESSAGE_CHARS,
   mostlyChinese,
@@ -59,6 +57,7 @@ type StoredMessage = {
   correction_ready: boolean;
   correction_status: string;
   created_at: string;
+  translation_zh?: string;
 };
 
 export type StoredSession = {
@@ -143,6 +142,7 @@ function mergeMessages(stored: StoredMessage[], incoming: StoredMessage[]) {
       correction: next.correction ?? item.correction,
       correction_status: next.correction_status || item.correction_status,
       correction_ready: Boolean(item.correction_ready || next.correction_ready),
+      translation_zh: next.translation_zh || item.translation_zh,
     };
   });
   for (const item of incoming) {
@@ -202,6 +202,7 @@ function publicMessage(message: StoredMessage) {
     assisted: message.assisted,
     correction: message.correction,
     correction_status: message.correction_status || "",
+    ...(message.translation_zh ? { translation_zh: message.translation_zh } : {}),
   };
 }
 
@@ -330,8 +331,7 @@ function pinFromScene(scene: CustomScene, partner: PartnerSpec): HomePin {
 
 async function fold(settings: StoredSettings, session: StoredSession) {
   const messages = session.messages;
-  const chars = messages.reduce((sum, message) => sum + (message.text || "").length, 0);
-  if (chars <= CHAT_CONTEXT_CHARS || messages.length <= CHAT_RECENT_MESSAGES) return { recent: messages, covered: "" };
+  if (messages.length <= CHAT_RECENT_MESSAGES) return { recent: messages, covered: "" };
   const recent = messages.slice(-CHAT_RECENT_MESSAGES);
   const prefix = messages.slice(0, -CHAT_RECENT_MESSAGES);
   let start = 0;
@@ -460,12 +460,12 @@ async function writeRecap(sessionId: string) {
             scene_id: session.scene_id,
             level: session.level,
             already_talked_about: folded.covered,
-            turns: visible.map((item) => ({
-              role: item.role,
-              text: item.text,
-              assisted: item.assisted,
-              ...(item.correction ? { correction: item.correction } : {}),
-            })),
+              turns: visible.map((item) => ({
+                role: item.role,
+                text: item.text,
+                assisted: item.assisted,
+                ...(item.correction?.suggestion ? { revised: item.correction.suggestion } : {}),
+              })),
           }),
         },
       ],
@@ -811,16 +811,15 @@ export const localApi = {
         settings.base_url,
         settings.api_key,
         settings.model,
-        correctionSystem(level),
+        correctionSystem(),
         [
           {
             role: "user",
             content: JSON.stringify({
-              scene_id: session.scene_id,
               level: session.level,
               utterance: current.text,
               assisted: current.assisted,
-              recent_turns: session.messages.slice(-MAX_CONTEXT_TURNS).map((item) => ({ role: item.role, text: item.text })),
+              partner_last: [...session.messages].reverse().find((item) => item.id !== current.id && item.role === "assistant")?.text || "",
             }),
           },
         ],
@@ -886,9 +885,13 @@ export const localApi = {
     }
   },
 
-  async translate(text: string) {
+  async translate(sessionId: string, messageId: string) {
+    const session = await getSession(sessionId);
+    const current = session.messages.find((item) => item.id === messageId);
+    if (!current) fail(404, "message_not_found", "找不到这句。");
+    if (current.translation_zh) return current.translation_zh;
     const settings = await requireModel();
-    const line = (text || "").trim();
+    const line = current.text.trim();
     if (!line) fail(422, "empty_text", "没有可以翻译的句子。");
     if (line.length > MAX_MESSAGE_CHARS) fail(422, "text_too_long", "这句太长了。");
     let raw = "";
@@ -905,6 +908,8 @@ export const localApi = {
     }
     const chinese = cleanReply(raw).replace(/^译文[:：]\s*/, "");
     if (!mostlyChinese(chinese)) fail(502, "bad_translation", "这句没有译出来。");
+    current.translation_zh = chinese;
+    await saveSession(session);
     return chinese;
   },
 

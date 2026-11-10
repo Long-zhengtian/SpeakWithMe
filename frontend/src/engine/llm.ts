@@ -75,11 +75,7 @@ export async function completeJson(baseUrl: string, apiKey: string, model: strin
     try {
       return parseJsonObject(last);
     } catch {
-      current = [
-        ...messages,
-        { role: "assistant", content: last.slice(0, 2000) },
-        { role: "user", content: "That was not a JSON object. Return one JSON object only, with no other text." },
-      ];
+      current = [...messages, { role: "user", content: "That was not a JSON object. Return one JSON object only, with no other text." }];
     }
   }
   throw new EngineError(502, "bad_json", "模型没有返回可用的内容。");

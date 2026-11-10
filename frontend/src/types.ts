@@ -76,6 +76,7 @@ export type ChatMessage = {
   assisted: boolean;
   correction: Correction | null;
   correction_status?: "" | "clear" | "failed" | "corrected";
+  translation_zh?: string;
 };
 
 export type Session = {
