@@ -1,3 +1,4 @@
+import { HearButton } from "./HearButton";
 import type { Gloss } from "./types";
 
 type GlossCardProps = {
@@ -13,9 +14,12 @@ export function GlossCard({ gloss, saved, onKeep, onClose }: GlossCardProps) {
     <section className="panel" data-testid="gloss-panel">
       <div className="gloss-head">
         <h2>{gloss.text}</h2>
-        <button type="button" className="ghost slim" data-testid="gloss-close" onClick={onClose}>
-          关闭
-        </button>
+        <div className="gloss-actions">
+          <HearButton text={gloss.text} speakKey={`gloss:${gloss.text}`} />
+          <button type="button" className="ghost slim" data-testid="gloss-close" onClick={onClose}>
+            关闭
+          </button>
+        </div>
       </div>
       {gloss.phonetic ? (
         <p className="scene-kicker" data-testid="gloss-phonetic">

@@ -37,6 +37,7 @@ function startListener(
   let closed = false;
   let released = false;
   let stopRecognizer: (() => void) | null = null;
+  let recognizer: { close: () => void } | null = null;
   const pieces: string[] = [];
   let partial = "";
 
@@ -50,6 +51,13 @@ function startListener(
   const fail = (message: string) => {
     if (closed) return;
     closed = true;
+    const active = recognizer;
+    recognizer = null;
+    try {
+      active?.close();
+    } catch {
+      /* The recognizer may already be closed. */
+    }
     speechStatus(null);
     speechError(message);
     handlers.onError(message);
@@ -59,36 +67,40 @@ function startListener(
   void (async () => {
     try {
       const { sdk, config } = await openSpeech();
+      if (closed) return;
       config.speechRecognitionLanguage = language;
-      const recognizer = new sdk.SpeechRecognizer(config, sdk.AudioConfig.fromDefaultMicrophoneInput());
-      recognizer.recognizing = (_sender, event) => {
+      const active = new sdk.SpeechRecognizer(config, sdk.AudioConfig.fromDefaultMicrophoneInput());
+      recognizer = active;
+      active.recognizing = (_sender, event) => {
+        if (closed) return;
         partial = event.result.text || "";
         handlers.onText(join(pieces, partial));
       };
-      recognizer.recognized = (_sender, event) => {
+      active.recognized = (_sender, event) => {
+        if (closed) return;
         if (event.result.reason !== sdk.ResultReason.RecognizedSpeech || !event.result.text) return;
         pieces.push(event.result.text);
         partial = "";
         handlers.onText(join(pieces, ""));
       };
-      recognizer.canceled = (_sender, event) => {
+      active.canceled = (_sender, event) => {
         if (event.reason === sdk.CancellationReason.Error) fail(listenMessage(event.errorDetails));
       };
       speechStatus("正在听…");
       await new Promise<void>((resolve, reject) => {
-        recognizer.startContinuousRecognitionAsync(resolve, (error) => reject(new Error(String(error))));
+        active.startContinuousRecognitionAsync(resolve, (error) => reject(new Error(String(error))));
       });
       let stopping = false;
       stopRecognizer = () => {
         if (stopping) return;
         stopping = true;
-        recognizer.stopContinuousRecognitionAsync(
+        active.stopContinuousRecognitionAsync(
           () => {
-            recognizer.close();
+            active.close();
             finish(join(pieces, partial));
           },
           () => {
-            recognizer.close();
+            active.close();
             finish(join(pieces, partial));
           },
         );

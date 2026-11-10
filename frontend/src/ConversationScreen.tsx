@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, subscribePractice } from "./api/client";
 import { categoryLabel } from "./lib/labels";
 import { bindHold } from "./lib/hold";
@@ -72,6 +72,10 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   const microphone = canListen();
   const heardRef = useRef<Set<string>>(new Set());
   const heardReady = useRef(false);
+  const draftText = useRef(draft);
+  const partnerSeen = useRef<string | null>(null);
+  draftText.current = draft;
+  const partnerLineId = [...messages].reverse().find((item) => item.role === "assistant")?.id ?? "";
 
   const userSpoke = messages.some((message) => message.role === "user");
 
@@ -85,11 +89,19 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
         if (next.recap) {
           setRecap(next.recap);
           setRecapLoading(false);
-        } else if (!next.ending) {
-          setRecapLoading(false);
+          return;
         }
+        if (!next.ending) {
+          setRecapLoading(false);
+          return;
+        }
+        setRecapLoading(true);
+        const written = await api.recap(session.id);
+        if (!alive) return;
+        setRecap(written);
+        setRecapLoading(false);
       } catch {
-        /* The summary is still being written. */
+        if (alive) setRecapLoading(false);
       }
     }
     void refresh();
@@ -120,6 +132,18 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     heardRef.current.add(newest.id);
     speak(newest.text, newest.id, session.scene.partner_name);
   }, [messages, listening, session.scene.partner_name]);
+
+  useEffect(() => {
+    if (partnerSeen.current === null) {
+      partnerSeen.current = partnerLineId;
+      return;
+    }
+    if (partnerSeen.current === partnerLineId) return;
+    partnerSeen.current = partnerLineId;
+    setIntent("");
+    setCoachLine(null);
+    setCoachVariant(0);
+  }, [partnerLineId]);
 
   useEffect(
     () => () => {
@@ -230,9 +254,16 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
       );
       if (!assisted && session.corrections_enabled) void requestCorrection(result.user_message.id);
     } catch (err) {
-      setMessages((current) => current.filter((item) => item.id !== optimisticId));
-      if (!assisted) setDraft(cleaned);
-      if (assisted) setCoachOpen(true);
+      let kept = false;
+      try {
+        const next = await api.session(session.id);
+        kept = next.messages.some((item) => item.role === "user" && item.text === cleaned);
+        setMessages(next.messages);
+      } catch {
+        setMessages((current) => current.filter((item) => item.id !== optimisticId));
+      }
+      if (!kept && !assisted) setDraft(cleaned);
+      if (!kept && assisted) setCoachOpen(true);
       setError(err instanceof ApiError ? err.message : "这句话没发出去。");
     } finally {
       sendingRef.current = false;
@@ -244,6 +275,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   function beginTalk() {
     if (sendingRef.current || listenerRef.current) return;
     stopSpeaking();
+    const previous = draftText.current;
     setListening(true);
     setDraft("");
     setError(null);
@@ -258,6 +290,8 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
         if (text) {
           setDraft(text);
           setError(null);
+        } else {
+          setDraft(previous);
         }
       },
     });
@@ -360,7 +394,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     }
   }
 
-  async function lookup(word: string) {
+  const lookup = useCallback(async (word: string) => {
     setError(null);
     try {
       setGloss(await api.gloss(word));
@@ -368,7 +402,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "这个词没有查到。");
     }
-  }
+  }, []);
 
   async function keep(text: string, glossZh: string, kind: "word" | "sentence") {
     setError(null);
@@ -428,7 +462,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               key={message.id}
               message={message}
               partnerName={session.scene.partner_name}
-              onWord={(word) => void lookup(word)}
+              onWord={lookup}
             >
               {message.correction ? (
                 <aside className="correction" data-testid="correction-card">

@@ -53,6 +53,39 @@ function splitDefinitions(translation: string) {
   return lines;
 }
 
+let parser: Worker | null = null;
+let parseQueue: Promise<unknown> = Promise.resolve();
+
+function dictionaryWorker() {
+  if (!parser) parser = new Worker(new URL("./dictWorker.ts", import.meta.url), { type: "module" });
+  return parser;
+}
+
+function parseShard(compressed: ArrayBuffer) {
+  const run = () => {
+    if (typeof Worker === "undefined") {
+      const text = new TextDecoder().decode(gunzipSync(new Uint8Array(compressed)));
+      return Promise.resolve(JSON.parse(text) as Record<string, string[]>);
+    }
+    const worker = dictionaryWorker();
+    return new Promise<Record<string, string[]>>((resolve, reject) => {
+      const finish = (event: MessageEvent<{ ok: boolean; table?: Record<string, string[]> }>) => {
+        worker.removeEventListener("message", finish);
+        if (event.data.ok && event.data.table) resolve(event.data.table);
+        else reject(new Error("dictionary"));
+      };
+      worker.addEventListener("message", finish);
+      worker.postMessage(compressed, [compressed]);
+    });
+  };
+  const next = parseQueue.then(run, run);
+  parseQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 async function bucket(letter: string) {
   const name = letter >= "a" && letter <= "z" ? letter : "";
   if (buckets.has(name)) return buckets.get(name) || {};
@@ -65,9 +98,12 @@ async function bucket(letter: string) {
     buckets.set(name, {});
     return {};
   }
-  const compressed = new Uint8Array(await response.arrayBuffer());
-  const text = new TextDecoder().decode(gunzipSync(compressed));
-  const parsed = JSON.parse(text) as Record<string, string[]>;
+  let parsed: Record<string, string[]> = {};
+  try {
+    parsed = await parseShard(await response.arrayBuffer());
+  } catch {
+    parsed = {};
+  }
   buckets.set(name, parsed);
   return parsed;
 }

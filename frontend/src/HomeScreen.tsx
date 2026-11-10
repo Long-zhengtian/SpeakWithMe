@@ -227,7 +227,7 @@ function SceneRow({
     shift(Math.min(0, Math.max(-width, origin.base + dx)));
   }
 
-  function onPointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
+  function onPointerUp(event: { pointerId: number }) {
     if (!start.current || event.pointerId !== start.current.id) return;
     start.current = null;
     setDragging(false);
@@ -241,6 +241,16 @@ function SceneRow({
     }
     shift(current <= -REVEAL / 2 ? -REVEAL : 0);
   }
+
+  useEffect(() => {
+    const end = (event: PointerEvent) => onPointerUp(event);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => {
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  });
 
   return (
     <article

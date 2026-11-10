@@ -273,6 +273,7 @@ export function sceneSystem() {
     "- opening is one short English line the partner says first.",
     "- rescue_en is one simple English sentence the learner could say.",
     "- Do not put Chinese inside the English fields.",
+    "- Fill every field. Do not return empty strings.",
   ].join("\n");
 }
 
@@ -292,5 +293,6 @@ export function randomSceneSystem() {
     "- rescue_en is one simple English sentence the learner could say.",
     "- Do not put Chinese inside the English fields.",
     "- Avoid the titles listed in avoid_titles.",
+    "- Fill every field. Do not return empty strings.",
   ].join("\n");
 }

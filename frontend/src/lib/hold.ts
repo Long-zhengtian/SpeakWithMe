@@ -52,7 +52,9 @@ export function bindHold(element: HTMLElement, handlers: { start: () => void; en
   element.addEventListener("contextmenu", blockMenu);
   element.addEventListener("touchstart", onTouchStart, { passive: false });
   element.addEventListener("touchend", onTouchEnd);
+  element.addEventListener("touchcancel", onTouchEnd);
   document.addEventListener("touchend", onTouchEnd);
+  document.addEventListener("touchcancel", onTouchEnd);
   return () => {
     element.removeEventListener("pointerdown", onPointerDown);
     element.removeEventListener("pointerup", onPointerUp);
@@ -60,6 +62,8 @@ export function bindHold(element: HTMLElement, handlers: { start: () => void; en
     element.removeEventListener("contextmenu", blockMenu);
     element.removeEventListener("touchstart", onTouchStart);
     element.removeEventListener("touchend", onTouchEnd);
+    element.removeEventListener("touchcancel", onTouchEnd);
     document.removeEventListener("touchend", onTouchEnd);
+    document.removeEventListener("touchcancel", onTouchEnd);
   };
 }

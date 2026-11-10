@@ -14,9 +14,35 @@ export function cleanReply(text: string) {
   return cleaned;
 }
 
+const ABBREVIATIONS = new Set(["mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "mt", "etc"]);
+
 export function limitSentences(text: string, maxSentences = MAX_REPLY_SENTENCES) {
-  const parts = (text || "").trim().split(/(?<=[.!?])\s+/).filter(Boolean);
-  return parts.slice(0, maxSentences).join(" ");
+  return splitSentences(text).slice(0, maxSentences).join(" ");
+}
+
+function splitSentences(text: string) {
+  const cleaned = (text || "").trim();
+  if (!cleaned) return [];
+  const parts: string[] = [];
+  let start = 0;
+  for (let index = 0; index < cleaned.length; index += 1) {
+    const mark = cleaned[index];
+    const chinese = mark === "。" || mark === "！" || mark === "？";
+    const english = mark === "." || mark === "!" || mark === "?";
+    if (!chinese && !english) continue;
+    const next = cleaned[index + 1];
+    if (!chinese && next !== undefined && !/\s/.test(next)) continue;
+    if (mark === ".") {
+      const word = cleaned.slice(start, index).trim().split(/\s+/).pop()?.replace(/[^A-Za-z]/g, "").toLowerCase() || "";
+      if (ABBREVIATIONS.has(word) || word.length === 1) continue;
+    }
+    const sentence = cleaned.slice(start, index + 1).trim();
+    if (sentence) parts.push(sentence);
+    start = index + 1;
+  }
+  const rest = cleaned.slice(start).trim();
+  if (rest) parts.push(rest);
+  return parts;
 }
 
 export function mostlyChinese(text: string) {

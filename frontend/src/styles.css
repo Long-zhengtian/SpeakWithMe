@@ -38,6 +38,10 @@ body {
 
 button, textarea { font: inherit; color: inherit; }
 
+button, a, label, summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
 button { cursor: pointer; }
 
 button:disabled { cursor: not-allowed; opacity: 0.55; }
@@ -895,6 +899,7 @@ button.home-scene-remove:disabled {
 
 .gloss-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .gloss-head h2 { margin: 0; }
+.gloss-actions { display: flex; align-items: center; gap: 8px; }
 .gloss-lines { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 .sheet-bar, .sheet-backdrop, .sheet-grab { display: none; }
 .sheet-scroll { display: grid; gap: 12px; min-width: 0; }

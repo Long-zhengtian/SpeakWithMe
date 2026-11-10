@@ -1,17 +1,36 @@
 const DB_NAME = "speak-with-me";
 
+let opening: Promise<IDBDatabase> | null = null;
+
 function openDb() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("sessions")) db.createObjectStore("sessions");
-      if (!db.objectStoreNames.contains("phrases")) db.createObjectStore("phrases");
-      if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+  if (!opening) {
+    opening = new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains("sessions")) db.createObjectStore("sessions");
+        if (!db.objectStoreNames.contains("phrases")) db.createObjectStore("phrases");
+        if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        const drop = () => {
+          if (opening) opening = null;
+        };
+        db.onversionchange = () => {
+          db.close();
+          drop();
+        };
+        db.onclose = drop;
+        resolve(db);
+      };
+      request.onerror = () => {
+        opening = null;
+        reject(request.error);
+      };
+    });
+  }
+  return opening;
 }
 
 function done(transaction: IDBTransaction) {
@@ -37,8 +56,14 @@ async function transact<T>(name: string, mode: IDBTransactionMode, run: (store: 
     const result = await run(transaction.objectStore(name));
     await finished;
     return result;
-  } finally {
-    db.close();
+  } catch (error) {
+    try {
+      db.close();
+    } catch {
+      /* The next call opens a fresh connection. */
+    }
+    opening = null;
+    throw error;
   }
 }
 

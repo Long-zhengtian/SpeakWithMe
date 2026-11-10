@@ -107,23 +107,85 @@ function fail(status: number, code: string, message: string): never {
   throw new EngineError(status, code, message);
 }
 
-async function sessions() {
-  const rows = await store.all<StoredSession>("sessions");
-  return rows.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+let sessionCache: StoredSession[] | null = null;
+const saveTails = new Map<string, Promise<void>>();
+const removedSessions = new Set<string>();
+const recapJobs = new Map<string, ReturnType<typeof writeRecap>>();
+
+function dropSessionCache() {
+  sessionCache = null;
 }
 
-async function saveSession(session: StoredSession, touch = true, releaseEnding = false) {
-  const current = await store.get<StoredSession>("sessions", session.id);
-  if (current?.finished_at && !session.finished_at) {
-    session.finished_at = current.finished_at;
-    session.recap = current.recap;
-    session.ending_at = "";
-  } else if (!releaseEnding && current?.ending_at && !session.ending_at && !session.finished_at) {
-    session.ending_at = current.ending_at;
+function enqueueSave<T>(id: string, job: () => Promise<T>) {
+  const previous = saveTails.get(id) ?? Promise.resolve();
+  const result = previous.catch(() => undefined).then(job);
+  saveTails.set(
+    id,
+    result.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return result;
+}
+
+function mergeMessages(stored: StoredMessage[], incoming: StoredMessage[]) {
+  const incomingById = new Map(incoming.map((item) => [item.id, item]));
+  const seen = new Set<string>();
+  const merged = stored.map((item) => {
+    seen.add(item.id);
+    const next = incomingById.get(item.id);
+    if (!next) return item;
+    return {
+      ...item,
+      ...next,
+      text: next.text || item.text,
+      correction: next.correction ?? item.correction,
+      correction_status: next.correction_status || item.correction_status,
+      correction_ready: Boolean(item.correction_ready || next.correction_ready),
+    };
+  });
+  for (const item of incoming) {
+    if (!seen.has(item.id)) merged.push(item);
   }
-  if (touch) session.updated_at = nowIso();
-  await store.put("sessions", session.id, session);
-  return session;
+  return merged;
+}
+
+async function sessions() {
+  if (sessionCache) return sessionCache;
+  const rows = await store.all<StoredSession>("sessions");
+  sessionCache = rows.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+  return sessionCache;
+}
+
+async function saveSession(session: StoredSession, touch = true, releaseEnding = false, replace = false) {
+  return enqueueSave(session.id, async () => {
+    if (replace) removedSessions.delete(session.id);
+    if (removedSessions.has(session.id)) return session;
+    const current = await store.get<StoredSession>("sessions", session.id);
+    if (!current || replace) {
+      if (touch) session.updated_at = nowIso();
+      await store.put("sessions", session.id, session);
+      dropSessionCache();
+      return session;
+    }
+    const merged: StoredSession = {
+      ...current,
+      ...session,
+      messages: mergeMessages(current.messages || [], session.messages || []),
+    };
+    if (current.finished_at && !session.finished_at) {
+      merged.finished_at = current.finished_at;
+      merged.recap = current.recap;
+      merged.ending_at = "";
+    } else if (!releaseEnding && current.ending_at && !session.ending_at && !session.finished_at) {
+      merged.ending_at = current.ending_at;
+    }
+    if (touch) merged.updated_at = nowIso();
+    await store.put("sessions", session.id, merged);
+    dropSessionCache();
+    return merged;
+  });
 }
 
 async function requireModel() {
@@ -280,9 +342,14 @@ async function fold(settings: StoredSettings, session: StoredSession) {
   const pending = prefix.slice(start);
   let summary = (session.folded_summary || "").trim();
   if (pending.length) {
-    summary = await summarizeFold(settings, summary, pending);
-    session.folded_summary = summary;
-    session.folded_until_id = prefix[prefix.length - 1].id;
+    const pendingChars = pending.reduce((sum, message) => sum + (message.text || "").length, 0);
+    if (pending.length >= 4 || pendingChars >= 1200) {
+      summary = await summarizeFold(settings, summary, pending);
+      session.folded_summary = summary;
+      session.folded_until_id = prefix[prefix.length - 1].id;
+    } else {
+      summary = localCovered(pending, summary);
+    }
   }
   return { recent, covered: summary };
 }
@@ -344,7 +411,8 @@ async function partnerReply(settings: StoredSettings, session: StoredSession) {
       task: "chat",
       json: false,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof EngineError && error.code === "llm_truncated") fail(502, error.code, error.message);
     fail(502, "llm_unavailable", "聊天暂时没有接上，再试一次。");
   }
   return ensurePartnerEnglish(raw, scene.clarify_en, level.max_sentences);
@@ -362,6 +430,68 @@ function message(role: string, text: string, extra: Partial<StoredMessage> = {})
     created_at: nowIso(),
     ...extra,
   };
+}
+
+async function writeRecap(sessionId: string) {
+  const settings = await requireModel();
+  const session = await getSession(sessionId);
+  if (session.finished_at && session.recap) return session.recap;
+  if (!session.messages.some((item) => item.role === "user")) fail(422, "empty_session", "还没开口，这场不用小结。");
+  session.ending_at = session.ending_at || nowIso();
+  await saveSession(session);
+  notifyPractice();
+  const folded = await fold(settings, session);
+  let visible = session.messages;
+  if (folded.covered && session.folded_until_id) {
+    const index = session.messages.findIndex((item) => item.id === session.folded_until_id);
+    if (index >= 0) visible = session.messages.slice(index + 1);
+  }
+  let data: Record<string, unknown> = {};
+  try {
+    data = await completeJson(
+      settings.base_url,
+      settings.api_key,
+      settings.model,
+      recapSystem(),
+      [
+        {
+          role: "user",
+          content: JSON.stringify({
+            scene_id: session.scene_id,
+            level: session.level,
+            already_talked_about: folded.covered,
+            turns: visible.map((item) => ({
+              role: item.role,
+              text: item.text,
+              assisted: item.assisted,
+              ...(item.correction ? { correction: item.correction } : {}),
+            })),
+          }),
+        },
+      ],
+      "recap",
+    );
+  } catch (error) {
+    const failed = await getSession(sessionId);
+    failed.ending_at = "";
+    await saveSession(failed, true, true);
+    notifyPractice();
+    const message = error instanceof EngineError ? error.message : "小结暂时没有生成，再试一次。";
+    fail(502, error instanceof EngineError ? error.code : "llm_unavailable", message);
+  }
+  const went = Array.isArray(data.went_well) ? data.went_well.map((item) => String(item).trim()).filter(Boolean).slice(0, 3) : [];
+  const finished = await getSession(sessionId);
+  finished.recap = {
+    went_well: went.length ? went : ["这场对话接上了。"],
+    try_next: String(data.try_next || "").trim() || "下一场继续用短句把事情说完。",
+    keep_sentence: String(data.keep_sentence || "").trim(),
+    revised_from: String(data.revised_from || "").trim(),
+  };
+  finished.finished_at = nowIso();
+  finished.ending_at = "";
+  await saveSession(finished);
+  notifyPractice();
+  return finished.recap;
 }
 
 export const localApi = {
@@ -625,9 +755,13 @@ export const localApi = {
   },
 
   async deleteSession(sessionId: string) {
-    const existing = await store.get("sessions", sessionId);
-    if (!existing) fail(404, "session_not_found", "这场对话不在记录里。");
-    await store.remove("sessions", sessionId);
+    await enqueueSave(sessionId, async () => {
+      const existing = await store.get("sessions", sessionId);
+      if (!existing) fail(404, "session_not_found", "这场对话不在记录里。");
+      removedSessions.add(sessionId);
+      await store.remove("sessions", sessionId);
+      dropSessionCache();
+    });
     return { ok: true };
   },
 
@@ -644,6 +778,7 @@ export const localApi = {
       created_at: nowIso(),
     });
     session.messages = [...session.messages, user];
+    await saveSession(session);
     const reply = await partnerReply(settings, session);
     const assistant = message("assistant", reply, { correction_ready: true });
     session.messages = [...session.messages, assistant];
@@ -740,64 +875,15 @@ export const localApi = {
   },
 
   async recap(sessionId: string) {
-    const settings = await requireModel();
-    const session = await getSession(sessionId);
-    if (session.finished_at && session.recap) return session.recap;
-    if (!session.messages.some((item) => item.role === "user")) fail(422, "empty_session", "还没开口，这场不用小结。");
-    session.ending_at = session.ending_at || nowIso();
-    await saveSession(session);
-    notifyPractice();
-    const folded = await fold(settings, session);
-    let visible = session.messages;
-    if (folded.covered && session.folded_until_id) {
-      const index = session.messages.findIndex((item) => item.id === session.folded_until_id);
-      if (index >= 0) visible = session.messages.slice(index + 1);
-    }
-    let data: Record<string, unknown> = {};
+    const running = recapJobs.get(sessionId);
+    if (running) return running;
+    const job = writeRecap(sessionId);
+    recapJobs.set(sessionId, job);
     try {
-      data = await completeJson(
-        settings.base_url,
-        settings.api_key,
-        settings.model,
-        recapSystem(),
-        [
-          {
-            role: "user",
-            content: JSON.stringify({
-              scene_id: session.scene_id,
-              level: session.level,
-              already_talked_about: folded.covered,
-              turns: visible.map((item) => ({
-                role: item.role,
-                text: item.text,
-                assisted: item.assisted,
-                ...(item.correction ? { correction: item.correction } : {}),
-              })),
-            }),
-          },
-        ],
-        "recap",
-      );
-    } catch (error) {
-      const failed = await getSession(sessionId);
-      failed.ending_at = "";
-      await saveSession(failed, true, true);
-      notifyPractice();
-      if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "小结暂时没有生成，再试一次。");
+      return await job;
+    } finally {
+      if (recapJobs.get(sessionId) === job) recapJobs.delete(sessionId);
     }
-    const went = Array.isArray(data.went_well) ? data.went_well.map((item) => String(item).trim()).filter(Boolean).slice(0, 3) : [];
-    const finished = await getSession(sessionId);
-    finished.recap = {
-      went_well: went.length ? went : ["这场对话接上了。"],
-      try_next: String(data.try_next || "").trim() || "下一场继续用短句把事情说完。",
-      keep_sentence: String(data.keep_sentence || "").trim(),
-      revised_from: String(data.revised_from || "").trim(),
-    };
-    finished.finished_at = nowIso();
-    finished.ending_at = "";
-    await saveSession(finished);
-    notifyPractice();
-    return finished.recap;
   },
 
   async translate(text: string) {
@@ -940,7 +1026,7 @@ export const localApi = {
     for (const item of body.sessions) {
       const session = item as StoredSession;
       if (!session?.id) fail(422, "bad_backup", "这份备份里有读不了的内容。");
-      await saveSession(session, false);
+      await saveSession(session, false, false, true);
     }
     for (const item of body.phrases) {
       const phrase = item as StoredPhrase;
@@ -1033,8 +1119,10 @@ async function buildScene(settings: StoredSettings, situation: string, levelId: 
       "scene",
     );
   } catch (error) {
-    if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "这场场景暂时没有准备好，再试一次。");
+    if (error instanceof EngineError) fail(502, error.code, "这场场景暂时没有准备好，再试一次。");
+    throw error;
   }
+  if (!sceneReady(data)) fail(502, "bad_json", "这场场景暂时没有准备好，再试一次。");
   return sceneFromModel(data, partner, situation);
 }
 
@@ -1061,9 +1149,15 @@ async function buildRandomScene(settings: StoredSettings, partner: PartnerSpec, 
       "scene",
     );
   } catch (error) {
-    if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "随机场景暂时没有准备好，再试一次。");
+    if (error instanceof EngineError) fail(502, error.code, "随机场景暂时没有准备好，再试一次。");
+    throw error;
   }
+  if (!sceneReady(data)) fail(502, "bad_json", "随机场景暂时没有准备好，再试一次。");
   return sceneFromModel(data, partner, "随便聊一件生活里的事。");
+}
+
+function sceneReady(data: Record<string, unknown>) {
+  return Boolean(String(data.title_zh || "").trim() && String(data.partner_role_zh || "").trim() && String(data.opening || "").trim());
 }
 
 function coerceCorrection(data: Record<string, unknown>, utterance: string): Correction | null {

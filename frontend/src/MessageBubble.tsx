@@ -1,4 +1,4 @@
-import { Children, useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { ApiError, api } from "./api/client";
 import { Avatar } from "./Avatar";
 import { HearButton } from "./HearButton";
@@ -14,7 +14,7 @@ type MessageBubbleProps = {
 
 type MenuPlace = { top: number; left: number; below: boolean };
 
-export function MessageBubble({ message, partnerName, onWord, children }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, partnerName, onWord, children }: MessageBubbleProps) {
   const mine = message.role === "user";
   const extra = Children.toArray(children);
   const avatarRef = useRef<HTMLButtonElement | null>(null);
@@ -109,4 +109,4 @@ export function MessageBubble({ message, partnerName, onWord, children }: Messag
       {extra.length ? <div className="bubble-extra">{extra}</div> : null}
     </article>
   );
-}
+});

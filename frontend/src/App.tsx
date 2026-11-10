@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, api } from "./api/client";
+import { stopSpeaking } from "./lib/speak";
 import { AppShell, type LibraryPage } from "./AppShell";
 import { ConversationScreen } from "./ConversationScreen";
 import { HomeScreen } from "./HomeScreen";
@@ -47,6 +48,7 @@ export function App() {
   useEffect(() => {
     history.replaceState({ speak: { name: "home" } satisfies Screen }, "");
     function onPop(event: PopStateEvent) {
+      stopSpeaking();
       const next = (event.state as { speak?: Screen } | null)?.speak;
       if (next?.name) setScreen(next);
     }
@@ -55,6 +57,7 @@ export function App() {
   }, []);
 
   function goBack() {
+    stopSpeaking();
     const state = history.state as { overlay?: string; speak?: Screen } | null;
     if (state?.overlay || (state?.speak && state.speak.name !== "home")) {
       history.back();
@@ -64,6 +67,7 @@ export function App() {
   }
 
   function show(next: Screen, mode: "push" | "replace") {
+    stopSpeaking();
     setScreen(next);
     showScreen(next, mode);
   }
