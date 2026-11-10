@@ -64,7 +64,7 @@ cd android && ./gradlew assembleDebug --no-daemon
 
 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
 
-当前调试包是 1.5.3。里面有编好的页面和 `assets/public/ecdict` 词典分片。听写和朗读的模型不在包里，使用时连 Azure。
+当前调试包是 1.5.7。里面有编好的页面和 `assets/public/ecdict` 词典分片。听写和朗读的模型不在包里，使用时连 Azure。
 
 装到手机上有两种办法：
 
@@ -77,7 +77,7 @@ adb install -r frontend/android/app/build/outputs/apk/debug/app-debug.apk
 
 `-r` 会覆盖已安装的同名调试包，练习记录留在手机上。
 
-手机上的记录和电脑浏览器是分开的。换过去之前，在电脑「设置 → 换设备」导出 `speak-with-me-YYYY-MM-DD.json`，到手机的同一处导入。文件里有场次、笔记和模型密钥。
+手机上的记录和电脑浏览器是分开的。换过去之前，在「设置 → 换设备」导出。手机把 `speak-with-me-YYYY-MM-DD.json` 存进「下载」文件夹，并弹出完整路径；电脑则交给浏览器下载，一般也在「下载」文件夹，同样弹出路径。再到另一台设备的同一处导入。文件里有场次、笔记和模型密钥。
 
 ## 在 GitHub 里打开
 

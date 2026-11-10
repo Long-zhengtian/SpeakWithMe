@@ -428,9 +428,11 @@ button.partner-avatar .avatar { width: 100%; height: 100%; }
 
 .correction span { color: var(--clay); font-size: 0.85rem; }
 
-.correction-original { text-decoration: line-through; color: var(--soft); }
+.correction-line { margin: 0; }
 
-.correction-suggestion { font-weight: 700; }
+.correction-drop { text-decoration: line-through; color: var(--soft); }
+
+.correction-next { font-weight: 700; }
 
 .pending { color: var(--soft); }
 
@@ -1026,6 +1028,51 @@ button.home-scene-remove:disabled {
 
 .record-menu button.danger:hover { background: var(--clay-bg); }
 
+.path-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.path-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(36, 28, 20, 0.35);
+}
+
+.path-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.path-dialog h2 { margin: 0; font-size: 1.15rem; }
+
+.path-value {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .record:hover { border-color: var(--green); }
 
 .notebook { display: grid; gap: 22px; }
@@ -1292,7 +1339,7 @@ html.is-phone .studio.talk .transcript {
   min-width: 0;
   height: 40px;
   min-height: 40px;
-  max-height: 120px;
+  max-height: 176px;
   resize: none;
   overflow: auto;
   padding: 8px 12px;

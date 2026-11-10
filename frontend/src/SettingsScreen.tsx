@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "./api/client";
+import { closeOverlay, useOverlay } from "./lib/overlay";
 import { SpeechSettings } from "./SpeechSettings";
 import type { LlmSettings } from "./types";
 
@@ -19,6 +20,9 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
   const [clearApiKey, setClearApiKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const [savedPath, setSavedPath] = useState<string | null>(null);
+  useOverlay(savedPath !== null, () => setSavedPath(null));
   const [saving, setSaving] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -139,16 +143,25 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
     setMoving(true);
     setError(null);
     setNotice(null);
+    setBackupNotice(null);
     try {
       const blob = await api.exportBackup();
+      const day = new Date().toISOString().slice(0, 10);
+      const filename = `speak-with-me-${day}.json`;
+      const bridge = (window as unknown as { SpeakWithMeBackup?: { saveBackup: (name: string, contents: string) => string } }).SpeakWithMeBackup;
+      if (bridge?.saveBackup) {
+        const saved = bridge.saveBackup(filename, await blob.text());
+        if (!saved) throw new Error("empty");
+        setSavedPath(saved);
+        return;
+      }
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const day = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `speak-with-me-${day}.json`;
+      link.download = filename;
       link.click();
-      URL.revokeObjectURL(url);
-      setNotice("已经下载。这份文件里有练习、笔记本和密钥。");
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setSavedPath(`下载/${filename}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "练习没有导出。");
     } finally {
@@ -161,6 +174,7 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
     setMoving(true);
     setError(null);
     setNotice(null);
+    setBackupNotice(null);
     try {
       const text = await file.text();
       const payload = JSON.parse(text) as unknown;
@@ -174,7 +188,7 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       setClearApiKey(false);
       onKeyChange(next.api_key_set);
       const settingsNote = result.settings ? "密钥也一起带回了。" : "";
-      setNotice(`带回 ${result.sessions} 场练习、${result.phrases} 条笔记。${settingsNote}`);
+      setBackupNotice(`带回 ${result.sessions} 场练习、${result.phrases} 条笔记。${settingsNote}`);
     } catch (err) {
       setError(err instanceof SyntaxError ? "这个文件读不了。" : err instanceof ApiError ? err.message : "练习没有导入。");
     } finally {
@@ -346,7 +360,7 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       <SpeechSettings />
       <section className="panel backup-panel">
         <h2>换设备</h2>
-        <p className="muted">导出一份文件，到另一台电脑或手机上导入，练习和笔记本会按原来的日期接上。同编号的记录用文件里的版本，文件里没有的记录留在这台设备上。</p>
+        <p className="muted">导出一份文件，到另一台电脑或手机上导入，练习和笔记本会按原来的日期接上。手机存在「下载」文件夹。同编号的记录用文件里的版本，文件里没有的记录留在这台设备上。</p>
         <div className="settings-actions">
           <button type="button" className="ghost" data-testid="export-backup" disabled={moving} onClick={() => void onExport()}>
             导出练习
@@ -363,10 +377,21 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
             onChange={(event) => void onImport(event.target.files?.[0])}
           />
         </div>
-        {notice && (notice.startsWith("已经下载") || notice.startsWith("带回")) ? (
-          <p data-testid="backup-notice">{notice}</p>
-        ) : null}
+        {backupNotice ? <p data-testid="backup-notice">{backupNotice}</p> : null}
       </section>
+      {savedPath ? (
+        <div className="path-layer">
+          <button type="button" className="path-backdrop" aria-label="关闭" onClick={() => { if (!closeOverlay()) setSavedPath(null); }} />
+          <section className="path-dialog" role="dialog" aria-modal="true" aria-labelledby="saved-path-title">
+            <h2 id="saved-path-title">已保存</h2>
+            <p className="path-value" data-testid="saved-path">{savedPath}</p>
+            <p className="muted">这份文件里有练习、笔记本和密钥。</p>
+            <button type="button" className="primary" onClick={() => { if (!closeOverlay()) setSavedPath(null); }}>
+              知道了
+            </button>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

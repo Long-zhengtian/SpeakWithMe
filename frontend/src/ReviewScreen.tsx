@@ -4,6 +4,7 @@ import { categoryLabel } from "./lib/labels";
 import { closeOverlay, useOverlay } from "./lib/overlay";
 import { formatWhen } from "./lib/time";
 import type { Gloss, Session } from "./types";
+import { CorrectionLine } from "./CorrectionLine";
 import { GlossCard } from "./GlossCard";
 import { MessageBubble } from "./MessageBubble";
 
@@ -160,8 +161,7 @@ export function ReviewScreen({
               {message.correction ? (
                 <aside className="correction">
                   <span>{categoryLabel(message.correction.category)}</span>
-                  <p className="correction-original">{message.correction.original_span}</p>
-                  <p className="correction-suggestion">{message.correction.suggestion}</p>
+                  <CorrectionLine original={message.correction.original_span} suggestion={message.correction.suggestion} />
                   <p className="correction-why">{message.correction.explanation_zh}</p>
                 </aside>
               ) : null}

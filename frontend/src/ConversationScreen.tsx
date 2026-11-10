@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError, api, subscribePractice } from "./api/client";
 import { categoryLabel } from "./lib/labels";
 import { bindHold } from "./lib/hold";
@@ -9,6 +9,7 @@ import { speak, stopSpeaking } from "./lib/speak";
 import type { ChatMessage, CoachLine, Gloss, Recap, Session } from "./types";
 import { Avatar } from "./Avatar";
 import { GlossCard } from "./GlossCard";
+import { CorrectionLine } from "./CorrectionLine";
 import { HearButton } from "./HearButton";
 import { MessageBubble } from "./MessageBubble";
 
@@ -194,17 +195,17 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     return () => cleanups.forEach((cleanup) => cleanup());
   }, [microphone, coachOpen, phone, inputMode]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     for (const node of [draftRef.current, voiceRef.current]) {
       if (!node) continue;
       node.style.height = "40px";
-      node.style.height = `${Math.min(node.scrollHeight, 120)}px`;
+      node.style.height = `${Math.min(node.scrollHeight, 176)}px`;
     }
     if (focusDraft.current) {
       focusDraft.current = false;
       draftRef.current?.focus();
     }
-  }, [draft, inputMode]);
+  }, [draft, inputMode, listening]);
 
   async function requestCorrection(messageId: string) {
     setPendingCorrectionId(messageId);
@@ -468,8 +469,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               {message.correction ? (
                 <aside className="correction" data-testid="correction-card">
                   <span>{categoryLabel(message.correction.category)}</span>
-                  <p className="correction-original">{message.correction.original_span}</p>
-                  <p className="correction-suggestion">{message.correction.suggestion}</p>
+                  <CorrectionLine original={message.correction.original_span} suggestion={message.correction.suggestion} />
                   <p className="correction-why">{message.correction.explanation_zh}</p>
                   <button
                     type="button"

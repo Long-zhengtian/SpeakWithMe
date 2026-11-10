@@ -5,6 +5,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.app.ActivityCompat;
@@ -50,6 +51,14 @@ public class MainActivity extends BridgeActivity {
         webView.setHapticFeedbackEnabled(false);
         webView.setOnLongClickListener(null);
         webView.setLongClickable(false);
+        webView.addJavascriptInterface(new BackupBridge(), "SpeakWithMeBackup");
+    }
+
+    private final class BackupBridge {
+        @JavascriptInterface
+        public String saveBackup(String filename, String contents) {
+            return BackupStore.save(MainActivity.this, filename, contents);
+        }
     }
 
     private void keepClearOfSystemBars() {
@@ -66,8 +75,7 @@ public class MainActivity extends BridgeActivity {
         content.setBackgroundColor(PAPER);
         ViewCompat.setOnApplyWindowInsetsListener(content, (view, windowInsets) -> {
             Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-            Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
-            view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             return WindowInsetsCompat.CONSUMED;
         });
         ViewCompat.requestApplyInsets(content);
