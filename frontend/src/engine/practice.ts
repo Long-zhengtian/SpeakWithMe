@@ -85,6 +85,8 @@ type StoredPhrase = {
   gloss_zh: string;
   created_at: string;
   learning_status: string;
+  original_text?: string;
+  category?: string;
 };
 
 const BACKUP_FORMAT = "speak-with-me-backup";
@@ -927,16 +929,34 @@ export const localApi = {
     return rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   },
 
-  async savePhrase(text: string, glossZh: string, kind: string) {
+  async savePhrase(text: string, glossZh: string, kind: string, mark?: { original?: string; category?: string }) {
     const cleaned = text.trim();
     const gloss = glossZh.trim();
     if (!cleaned || !gloss || (kind !== "word" && kind !== "sentence")) fail(422, "invalid_phrase", "要留下的句子不完整。");
-    if (cleaned.length > 160 || gloss.length > 80) fail(422, "phrase_too_long", "这句太长了，缩短一点再收下。");
+    const original = (mark?.original || "").trim();
+    const category = (mark?.category || "").trim();
+    const marked = Boolean(original && original !== cleaned);
     const existing = (await store.all<StoredPhrase>("phrases")).find(
       (phrase) => phrase.kind === kind && phrase.text.toLowerCase() === cleaned.toLowerCase(),
     );
-    if (existing) return existing;
-    const phrase: StoredPhrase = { id: newId(), kind, text: cleaned, gloss_zh: gloss, created_at: nowIso(), learning_status: "learning" };
+    if (existing) {
+      if (marked && !existing.original_text) {
+        existing.original_text = original;
+        existing.category = category;
+        existing.gloss_zh = gloss;
+        await store.put("phrases", existing.id, existing);
+      }
+      return existing;
+    }
+    const phrase: StoredPhrase = {
+      id: newId(),
+      kind,
+      text: cleaned,
+      gloss_zh: gloss,
+      created_at: nowIso(),
+      learning_status: "learning",
+      ...(marked ? { original_text: original, category } : {}),
+    };
     await store.put("phrases", phrase.id, phrase);
     return phrase;
   },

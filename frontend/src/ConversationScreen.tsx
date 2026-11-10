@@ -276,24 +276,19 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   function beginTalk() {
     if (sendingRef.current || listenerRef.current) return;
     stopSpeaking();
-    const previous = draftText.current;
+    const previous = draftText.current.trim();
     setListening(true);
-    setDraft("");
     setError(null);
     setStatus(null);
     const listener = startEnglishListener({
-      onText: setDraft,
+      onText: (text) => setDraft(joinSpoken(previous, text)),
       onError: (message) => setError(message),
       onEnd: (text) => {
         listenerRef.current = null;
         setListening(false);
         setStatus(null);
-        if (text) {
-          setDraft(text);
-          setError(null);
-        } else {
-          setDraft(previous);
-        }
+        setDraft(joinSpoken(previous, text));
+        if (text) setError(null);
       },
     });
     listenerRef.current = listener;
@@ -405,10 +400,15 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     }
   }, []);
 
-  async function keep(text: string, glossZh: string, kind: "word" | "sentence") {
+  async function keep(
+    text: string,
+    glossZh: string,
+    kind: "word" | "sentence",
+    mark?: { original: string; category: string },
+  ) {
     setError(null);
     try {
-      await api.savePhrase(text, glossZh, kind);
+      await api.savePhrase(text, glossZh, kind, mark);
       setSavedKey(`${kind}:${text}`);
       return true;
     } catch (err) {
@@ -474,9 +474,14 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                   <button
                     type="button"
                     className="text-button"
-                    onClick={() =>
-                      void keep(message.correction?.suggestion ?? "", message.correction?.explanation_zh ?? "", "sentence")
-                    }
+                    onClick={() => {
+                      const correction = message.correction;
+                      if (!correction) return;
+                      void keep(correction.suggestion, correction.explanation_zh, "sentence", {
+                        original: correction.original_span,
+                        category: correction.category,
+                      });
+                    }}
                   >
                     {savedKey === `sentence:${message.correction.suggestion}` ? "已收下" : "收下这句"}
                   </button>
@@ -642,13 +647,14 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
         </aside>
         {recap ? null : (
           <form className={`composer ${inputMode === "voice" ? "is-voice" : "is-text"}`} onSubmit={onSend}>
-            {inputMode === "voice" && !listening && draft.trim() ? (
+            {inputMode === "voice" && draft.trim() ? (
               <div className="voice-preview">
                 <textarea
                   ref={voiceRef}
                   value={draft}
                   aria-label="刚说的英语"
                   rows={1}
+                  readOnly={listening}
                   disabled={sending}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
@@ -658,10 +664,10 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                     }
                   }}
                 />
-                <button className="primary composer-send" type="submit" data-testid="send-message" disabled={sending || !draft.trim()}>
+                <button className="primary composer-send" type="submit" data-testid="send-message" disabled={sending || listening || !draft.trim()}>
                   发送
                 </button>
-                <button type="button" className="composer-chip" onClick={() => setDraft("")}>
+                <button type="button" className="composer-chip" disabled={listening} onClick={() => setDraft("")}>
                   收起
                 </button>
               </div>
@@ -728,4 +734,12 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
       )}
     </main>
   );
+}
+
+function joinSpoken(previous: string, next: string) {
+  const left = previous.trim();
+  const right = next.trim();
+  if (!left) return right;
+  if (!right) return left;
+  return `${left} ${right}`;
 }

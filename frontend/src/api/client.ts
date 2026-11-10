@@ -96,8 +96,8 @@ export const api = {
   gloss: (text: string) => call(() => localApi.gloss(text) as Promise<Gloss>),
   translate: (sessionId: string, messageId: string) => call(() => localApi.translate(sessionId, messageId) as Promise<string>),
   phrases: () => call(() => localApi.phrases() as Promise<Phrase[]>),
-  savePhrase: (text: string, glossZh: string, kind: "word" | "sentence") =>
-    call(() => localApi.savePhrase(text, glossZh, kind) as Promise<Phrase>),
+  savePhrase: (text: string, glossZh: string, kind: "word" | "sentence", mark?: { original: string; category: string }) =>
+    call(() => localApi.savePhrase(text, glossZh, kind, mark) as Promise<Phrase>),
   deletePhrase: (phraseId: string) => call(() => localApi.deletePhrase(phraseId)),
   exportBackup: () => call(() => localApi.exportBackup()),
   importBackup: (payload: unknown) => call(() => localApi.importBackup(payload)),

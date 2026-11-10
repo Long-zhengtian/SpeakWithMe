@@ -194,4 +194,6 @@ export type Phrase = {
   gloss_zh: string;
   created_at: string;
   learning_status?: "learning" | "mastered" | string;
+  original_text?: string;
+  category?: string;
 };
