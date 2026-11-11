@@ -25,6 +25,9 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
   useOverlay(savedPath !== null, () => setSavedPath(null));
   const [saving, setSaving] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [balanceNonce, setBalanceNonce] = useState(0);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const [moving, setMoving] = useState(false);
   const backupFile = useRef<HTMLInputElement>(null);
 
@@ -56,6 +59,31 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
     if (!query) return models;
     return models.filter((item) => item.toLowerCase().includes(query));
   }, [filter, models]);
+
+  useEffect(() => {
+    if (provider !== "deepseek" || !selected?.api_key_set) {
+      setBalance(null);
+      setBalanceLoading(false);
+      return;
+    }
+    let alive = true;
+    setBalanceLoading(true);
+    api
+      .providerBalance("deepseek")
+      .then((next) => {
+        if (!alive) return;
+        setBalance(balanceLine(next));
+        setBalanceLoading(false);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setBalance("余额没有读到。");
+        setBalanceLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [provider, selected?.api_key_set, balanceNonce]);
 
   useEffect(() => {
     if (!modelsOpen) return;
@@ -132,6 +160,7 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       setClearApiKey(false);
       onKeyChange(next.api_key_set);
       setNotice(next.api_key_set ? "已经保存。下一场对话会用这个模型和密钥。" : "这个来源的密钥已经去掉。");
+      setBalanceNonce((current) => current + 1);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "没有保存。");
     } finally {
@@ -285,6 +314,24 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
             ) : (
               <p className="muted">密钥保存后只显示末尾几位。</p>
             )}
+            {provider === "deepseek" && selected.api_key_set && !clearApiKey ? (
+              <p className="balance" data-testid="provider-balance">
+                <span>{balanceLoading && !balance ? "正在看余额…" : balance}</span>
+                <button
+                  type="button"
+                  className="balance-refresh"
+                  data-testid="refresh-balance"
+                  aria-label="刷新余额"
+                  disabled={balanceLoading}
+                  onClick={() => setBalanceNonce((value) => value + 1)}
+                >
+                  <svg className={balanceLoading ? "spin" : undefined} viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <path d="M21 12a9 9 0 1 1-2.6-6.3L21 8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M21 3v5h-5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </p>
+            ) : null}
             <div className="settings-actions">
               <button type="button" className="ghost" data-testid="load-models" disabled={loadingModels || saving} onClick={() => void onLoadModels()}>
                 {loadingModels ? "正在读取…" : "读取模型"}
@@ -394,6 +441,15 @@ export function SettingsScreen({ onKeyChange }: SettingsScreenProps) {
       ) : null}
     </main>
   );
+}
+
+function balanceLine(balance: { currency: string; total: string; granted: string; available: boolean }) {
+  const unit = balance.currency === "CNY" ? "元" : balance.currency === "USD" ? "美元" : balance.currency;
+  const amount = unit ? `${balance.total} ${unit}` : balance.total;
+  const granted = Number(balance.granted);
+  const gift = Number.isFinite(granted) && granted > 0 ? `，其中赠送 ${balance.granted}` : "";
+  const short = balance.available ? "" : "，不够继续调用";
+  return `余额 ${amount}${gift}${short}`;
 }
 
 function sourceStatus(item: LlmSettings["providers"][number], activeId: string) {

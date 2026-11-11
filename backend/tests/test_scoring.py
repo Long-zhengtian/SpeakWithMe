@@ -86,3 +86,22 @@ def test_a_day_weights_a_longer_conversation_more():
     assert "改得最多的是说法" in today["summary"]
     assert calendar["spoke_today"] is True
     assert len(calendar["days"]) == 14
+
+
+def test_a_continued_session_counts_lines_on_the_day_they_were_said():
+    first = _line("I want coffee")
+    first.created_at = "2026-11-07T01:00:00+00:00"
+    later = []
+    for index in range(3):
+        line = _line("I came back %s" % index)
+        line.created_at = "2026-11-08T01:00:00+00:00"
+        later.append(line)
+    calendar = progress_calendar([_session([first, *later], "2026-11-07T01:00:00+00:00")], today=date(2026, 11, 8))
+    by_date = {mark["date"]: mark for mark in calendar["days"]}
+    assert by_date["2026-11-07"]["sessions"] == 1
+    assert by_date["2026-11-07"]["turns"] == 1
+    assert "说了 1 句" in by_date["2026-11-07"]["summary"]
+    assert by_date["2026-11-08"]["sessions"] == 1
+    assert by_date["2026-11-08"]["turns"] == 3
+    assert "说了 3 句" in by_date["2026-11-08"]["summary"]
+    assert calendar["practice_days"] == 2

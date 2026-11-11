@@ -91,11 +91,18 @@ def progress_calendar(sessions, today=None, days=14):
     grouped = {}
     practiced_dates = set()
     for session in sessions:
-        day = _local_date(session.created_at)
-        if day is None:
-            continue
-        practiced_dates.add(day)
-        grouped.setdefault(day, []).append(session)
+        by_day = {}
+        for message in session.messages:
+            if message.role != "user":
+                continue
+            day = _local_date(message.created_at or session.created_at)
+            if day is None:
+                continue
+            by_day.setdefault(day, []).append(message)
+        for day, lines in by_day.items():
+            practiced_dates.add(day)
+            spoken = session.model_copy(update={"messages": lines, "created_at": lines[0].created_at or session.created_at})
+            grouped.setdefault(day, []).append(spoken)
     marks = []
     for offset in range(days - 1, -1, -1):
         day = today - timedelta(days=offset)

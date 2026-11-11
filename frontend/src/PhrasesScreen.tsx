@@ -206,7 +206,7 @@ function SentenceCard({
             <aside className="correction">
               {phrase.category ? <span>{categoryLabel(phrase.category)}</span> : null}
               <CorrectionLine original={phrase.original_text || ""} suggestion={phrase.text} />
-              <p>{phrase.gloss_zh}</p>
+              <p className="correction-why">{phrase.gloss_zh}</p>
             </aside>
           ) : (
             <>

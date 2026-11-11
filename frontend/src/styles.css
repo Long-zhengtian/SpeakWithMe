@@ -430,6 +430,8 @@ button.partner-avatar .avatar { width: 100%; height: 100%; }
 
 .correction-line { margin: 0; }
 
+.correction-why { font-size: 0.8rem; line-height: 1.45; }
+
 .correction-drop { text-decoration: line-through; color: var(--soft); }
 
 .correction-next { font-weight: 700; }
@@ -1087,6 +1089,32 @@ button.home-scene-remove:disabled {
 
 .notebook-count { margin: 0; color: var(--soft); font-size: 0.95rem; white-space: nowrap; }
 
+.balance {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 4px 0 0;
+  color: var(--ink);
+}
+
+.balance-refresh {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--soft);
+  display: grid;
+  place-items: center;
+}
+
+.balance-refresh:hover:not(:disabled) { background: var(--cream); color: var(--ink); }
+
+.balance-refresh .spin { animation: balance-spin 0.8s linear infinite; }
+
+@keyframes balance-spin { to { transform: rotate(360deg); } }
+
 .notebook { display: grid; gap: 12px; }
 
 .notebook-tools {
@@ -1175,7 +1203,7 @@ button.home-scene-remove:disabled {
 
 .phrase-card .correction { min-width: 0; }
 
-.phrase-body .word-gloss { display: block; }
+.phrase-body .word-gloss { display: block; font-size: 0.8rem; }
 
 .word-list {
   background: var(--cream);

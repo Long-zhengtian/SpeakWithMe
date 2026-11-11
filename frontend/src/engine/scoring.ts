@@ -37,6 +37,7 @@ type Line = {
   correction?: { category?: string } | null;
   correction_ready?: boolean;
   correction_status?: string;
+  created_at?: string;
 };
 
 type ScoredSession = {
@@ -119,12 +120,21 @@ export function progressCalendar(sessions: ScoredSession[], today = localToday()
   const grouped = new Map<string, ScoredSession[]>();
   const practiced = new Set<string>();
   for (const session of sessions) {
-    const day = localDate(session.created_at);
-    if (!day) continue;
-    practiced.add(day);
-    const list = grouped.get(day) || [];
-    list.push(session);
-    grouped.set(day, list);
+    const byDay = new Map<string, Line[]>();
+    for (const message of session.messages) {
+      if (message.role !== "user") continue;
+      const day = localDate(message.created_at || session.created_at);
+      if (!day) continue;
+      const lines = byDay.get(day) || [];
+      lines.push(message);
+      byDay.set(day, lines);
+    }
+    for (const [day, lines] of byDay) {
+      practiced.add(day);
+      const list = grouped.get(day) || [];
+      list.push({ created_at: lines[0].created_at || session.created_at, messages: lines });
+      grouped.set(day, list);
+    }
   }
   const marks: DayMark[] = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {

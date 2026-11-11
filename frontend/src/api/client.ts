@@ -73,6 +73,16 @@ export const api = {
   pinSession: (sessionId: string) => call(() => localApi.pinSession(sessionId)),
   profile: () => call(() => localApi.profile() as Promise<Profile>),
   settings: () => call(() => localApi.settings() as Promise<LlmSettings>),
+  providerBalance: (provider: string) =>
+    call(
+      () =>
+        localApi.providerBalance(provider) as Promise<{
+          currency: string;
+          total: string;
+          granted: string;
+          available: boolean;
+        }>,
+    ),
   saveSettings: (input: { provider: string; baseUrl: string; model: string; apiKey: string; clearApiKey: boolean }) =>
     call(() => localApi.saveSettings(input) as Promise<LlmSettings>),
   listModels: (input: { provider: string; baseUrl: string; apiKey: string }) =>

@@ -578,6 +578,42 @@ export const localApi = {
     return publicSettings(await readSettings());
   },
 
+  async providerBalance(provider: string) {
+    if (provider !== "deepseek") fail(422, "balance_unavailable", "这一家没有余额可以看。");
+    const settings = await readSettings();
+    const key = settings.keys.deepseek || "";
+    if (!key) fail(428, "missing_api_key", "先保存 DeepSeek 的密钥。");
+    let response: Response;
+    try {
+      response = await fetch("https://api.deepseek.com/user/balance", {
+        headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      fail(502, "balance_unreachable", "余额没有读到。");
+    }
+    if (response.status === 401 || response.status === 403) fail(401, "rejected_key", "密钥没有被接受。");
+    if (!response.ok) fail(502, "balance_rejected", "余额没有读到。");
+    let payload: {
+      is_available?: boolean;
+      balance_infos?: { currency?: string; total_balance?: string; granted_balance?: string; topped_up_balance?: string }[];
+    };
+    try {
+      payload = await response.json();
+    } catch {
+      fail(502, "balance_rejected", "余额没有读到。");
+    }
+    const rows = Array.isArray(payload.balance_infos) ? payload.balance_infos : [];
+    const row = rows.find((item) => item.currency === "CNY") || rows[0];
+    if (!row?.total_balance) fail(502, "balance_rejected", "余额没有读到。");
+    return {
+      currency: row.currency || "",
+      total: row.total_balance,
+      granted: row.granted_balance || "0",
+      available: payload.is_available !== false,
+    };
+  },
+
   async saveSettings(input: { provider: string; baseUrl: string; model: string; apiKey: string; clearApiKey: boolean }) {
     const current = await readSettings();
     const provider = knownProvider(input.provider || current.provider);
