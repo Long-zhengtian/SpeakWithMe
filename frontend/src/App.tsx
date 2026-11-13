@@ -89,10 +89,12 @@ export function App() {
 
   if (screen.name === "setup") {
     return (
-      <SetupScreen
-        onBack={goBack}
-        onStart={(session) => show({ name: "talk", session, back: "home" }, "replace")}
-      />
+      <AppShell page="home" needsKey={hasKey === false} onNavigate={openLibrary}>
+        <SetupScreen
+          onBack={goBack}
+          onStart={(session) => show({ name: "talk", session, back: "home" }, "replace")}
+        />
+      </AppShell>
     );
   }
   if (screen.name === "talk") {
