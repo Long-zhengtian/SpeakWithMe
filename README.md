@@ -1,18 +1,16 @@
-# Speak With Me
+<h1 align="center" style="text-align: center">Speak With Me</h1>
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](https://github.com/Long-zhengtian/SpeakWithMe/blob/main/LICENSE)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Long-zhengtian/SpeakWithMe/pulls)
-[![Powered by React](https://img.shields.io/badge/Powered%20by-React-blue)](https://react.dev)
+<p align="center" style="text-align: center">先敢说，再说好。</p>
 
-说一句，改这一句。
-
-给自己练口语。对方只把英语接下去。这句话说完，再单独指出哪里要改。不知道怎么讲，先用中文问一句。模型和语音用你自己的密钥，练习留在这台设备上。
+<p align="center" style="text-align: center">
+  <a href="https://github.com/Long-zhengtian/SpeakWithMe/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License: GPL-3.0"></a>
+  <a href="https://github.com/Long-zhengtian/SpeakWithMe/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/Powered%20by-React-blue" alt="Powered by React"></a>
+</p>
 
 <p align="center">
   <img src="docs/images/web.png" width="920" alt="网页：左边是对话和指正，右边是怎么说" />
 </p>
-
-宽屏把对话放在左边，「怎么说」放在右边。手机是同一份界面，收成一列。
 
 ## 开一场
 
@@ -44,35 +42,50 @@
 
 ## 说完，只改这一句
 
-聊天、指正、怎么说，不放进同一次回复。
-
-**聊天**只把英语接下去。不改语法，不切中文。一场不限句数。超过 8 句之后，更早的内容收成一段「已经谈过什么」，最近 8 句原文仍发给模型。
-
-**指正**在这句话发出去、对方回复之后单独出现。原句留在气泡里，改动划掉再换上，下面有一句中文说明。
-
-**怎么说**接收你的中文，给你一句能直接说的英语。点一下才会进入对话。聊天角色看不到这句中文。点对方头像可以看这句的中文，译过一次就留在这句上。
-
-<p align="center">
-  <img src="docs/images/phone-talk.png" width="200" height="433" alt="说完再改这句" />
-</p>
+<table>
+  <tr>
+    <td width="220" valign="top">
+      <img src="docs/images/phone-talk.png" width="200" height="433" alt="说完再改这句" />
+    </td>
+    <td valign="top">
+      聊天、指正、怎么说，不放进同一次回复。
+      <br /><br />
+      <b>聊天</b>只把英语接下去。不改语法，不切中文。一场不限句数。超过 8 句之后，更早的内容收成一段「已经谈过什么」，最近 8 句原文仍发给模型。
+      <br /><br />
+      <b>指正</b>在这句话发出去、对方回复之后单独出现。原句留在气泡里，改动划掉再换上，下面有一句中文说明。
+      <br /><br />
+      <b>怎么说</b>接收你的中文，给你一句能直接说的英语。点一下才会进入对话。聊天角色看不到这句中文。点对方头像可以看这句的中文，译过一次就留在这句上。
+    </td>
+  </tr>
+</table>
 
 ## 听错的词，先换掉
 
-松开说话之后，字先留在输入框里。点「改听错的词」，模型按刚才的对话只换它觉得听错的词，语法和语序留着。点「用这句」才换上，不点就还是听到的原文。按住说话时，新的一句会接在还没发出去的文字后面。
-
-<p align="center">
-  <img src="docs/images/phone-hearing.png" width="200" height="433" alt="改听错的词" />
-</p>
+<table>
+  <tr>
+    <td width="220" valign="top">
+      <img src="docs/images/phone-hearing.png" width="200" height="433" alt="改听错的词" />
+    </td>
+    <td valign="top">
+      松开说话之后，字先留在输入框里。点「改听错的词」，模型按刚才的对话只换它觉得听错的词，语法和语序留着。点「用这句」才换上，不点就还是听到的原文。按住说话时，新的一句会接在还没发出去的文字后面。
+    </td>
+  </tr>
+</table>
 
 ## 留下这句
 
-句子和词分开放。带过指正的句子可以在「带着错误」和「改后的句子」之间换。点句子里的词，用打包在应用里的词典看释义，这一步不调用模型。
-
-<p align="center">
-  <img src="docs/images/phone-notebook.png" width="200" height="433" alt="笔记本" />
-</p>
-
-DeepSeek 作为对话来源时，设置里能看余额。换手机或换电脑时，导出一份文件再导入，练习按原来的日期接上。
+<table>
+  <tr>
+    <td width="220" valign="top">
+      <img src="docs/images/phone-notebook.png" width="200" height="433" alt="笔记本" />
+    </td>
+    <td valign="top">
+      句子和词分开放。带过指正的句子可以在「带着错误」和「改后的句子」之间换。点句子里的词，用打包在应用里的词典看释义，这一步不调用模型。
+      <br /><br />
+      DeepSeek 作为对话来源时，设置里能看余额。换手机或换电脑时，导出一份文件再导入，练习按原来的日期接上。
+    </td>
+  </tr>
+</table>
 
 ## 跑起来
 
