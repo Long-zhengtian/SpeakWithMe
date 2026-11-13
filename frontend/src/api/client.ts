@@ -121,6 +121,8 @@ export const api = {
           assistant_message: ChatMessage;
         }>,
     ),
+  repairHearing: (sessionId: string, text: string) =>
+    call(() => localApi.repairHearing(sessionId, text) as Promise<{ text: string }>),
   correct: (sessionId: string, messageId: string) =>
     call(
       () =>

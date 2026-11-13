@@ -40,6 +40,9 @@ type ConversationScreenProps = {
 export function ConversationScreen({ session, onExit, exitLabel = "回到主页" }: ConversationScreenProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(session.messages);
   const [draft, setDraft] = useState("");
+  const [hearing, setHearing] = useState<string | null>(null);
+  const [hearingNote, setHearingNote] = useState<string | null>(null);
+  const [hearingBusy, setHearingBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -273,11 +276,40 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
     }
   }
 
+  function forgetHearing() {
+    setHearing(null);
+    setHearingNote(null);
+  }
+
+  function editDraft(text: string) {
+    setDraft(text);
+    forgetHearing();
+  }
+
+  async function repairHearing() {
+    const heard = draftText.current.trim();
+    if (!heard || hearingBusy || sendingRef.current) return;
+    setHearingBusy(true);
+    forgetHearing();
+    setError(null);
+    try {
+      const next = await api.repairHearing(session.id, heard);
+      if (draftText.current.trim() !== heard) return;
+      if (next.text === heard) setHearingNote("这句没有要改的词。");
+      else setHearing(next.text);
+    } catch (err) {
+      if (draftText.current.trim() === heard) setError(err instanceof ApiError ? err.message : "听错的词没有看完，再试一次。");
+    } finally {
+      setHearingBusy(false);
+    }
+  }
+
   function beginTalk() {
     if (sendingRef.current || listenerRef.current) return;
     stopSpeaking();
     const previous = draftText.current.trim();
     setListening(true);
+    forgetHearing();
     setError(null);
     setStatus(null);
     const listener = startEnglishListener({
@@ -647,6 +679,41 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
         </aside>
         {recap ? null : (
           <form className={`composer ${inputMode === "voice" ? "is-voice" : "is-text"}`} onSubmit={onSend}>
+            {draft.trim() && !listening ? (
+              <div className="hearing-tools">
+                <button
+                  type="button"
+                  className="composer-chip"
+                  data-testid="repair-hearing"
+                  disabled={hearingBusy || sending}
+                  onClick={() => void repairHearing()}
+                >
+                  {hearingBusy ? "正在看听错的词…" : "改听错的词"}
+                </button>
+                {hearingNote ? <p className="hearing-note">{hearingNote}</p> : null}
+                {hearing ? (
+                  <div className="hearing-offer" data-testid="hearing-offer">
+                    <CorrectionLine original={draft} suggestion={hearing} />
+                    <div className="hearing-actions">
+                      <button
+                        type="button"
+                        className="text-button"
+                        data-testid="use-hearing"
+                        onClick={() => {
+                          setDraft(hearing);
+                          forgetHearing();
+                        }}
+                      >
+                        用这句
+                      </button>
+                      <button type="button" className="text-button" onClick={forgetHearing}>
+                        留下原句
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {inputMode === "voice" && draft.trim() ? (
               <div className="voice-preview">
                 <textarea
@@ -656,7 +723,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                   rows={1}
                   readOnly={listening}
                   disabled={sending}
-                  onChange={(event) => setDraft(event.target.value)}
+                  onChange={(event) => editDraft(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -667,7 +734,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                 <button className="primary composer-send" type="submit" data-testid="send-message" disabled={sending || listening || !draft.trim()}>
                   发送
                 </button>
-                <button type="button" className="composer-chip" disabled={listening} onClick={() => setDraft("")}>
+                <button type="button" className="composer-chip" disabled={listening} onClick={() => editDraft("")}>
                   收起
                 </button>
               </div>
@@ -708,7 +775,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                 aria-label="英语"
                 placeholder="英语"
                 disabled={sending || recapLoading}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => editDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();

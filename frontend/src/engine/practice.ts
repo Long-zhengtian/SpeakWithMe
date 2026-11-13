@@ -2,6 +2,7 @@ import {
   chatSystem,
   coachSystem,
   correctionSystem,
+  hearingSystem,
   foldSystem,
   getLevel,
   getPartner,
@@ -16,6 +17,7 @@ import {
   type PartnerSpec,
 } from "./catalog";
 import { lookupGloss } from "./dictionary";
+import { keepHearing } from "../lib/hearing";
 import { complete, completeJson } from "./llm";
 import { progressCalendar, scoreSession, categoryLabel } from "./scoring";
 import { readSpeech, writeSpeech, type SpeechSettings } from "./speech";
@@ -822,6 +824,30 @@ export const localApi = {
     session.messages = [...session.messages, assistant];
     await saveSession(session);
     return { user_message: publicMessage(user), assistant_message: publicMessage(assistant) };
+  },
+
+  async repairHearing(sessionId: string, text: string) {
+    const settings = await requireModel();
+    const session = await getSession(sessionId);
+    const heard = (text || "").replace(/\s+/g, " ").trim();
+    if (!heard) fail(422, "empty_message", "先有一句听到的话。");
+    if (heard.length > MAX_MESSAGE_CHARS) fail(422, "message_too_long", "这句话太长了，缩短一点。");
+    const recent = session.messages.slice(-8).map((item) => ({ role: item.role, text: item.text }));
+    let data: { text?: unknown };
+    try {
+      data = await completeJson(
+        settings.base_url,
+        settings.api_key,
+        settings.model,
+        hearingSystem(),
+        [{ role: "user", content: JSON.stringify({ heard, recent }) }],
+        "hearing",
+      );
+    } catch {
+      fail(502, "llm_unavailable", "听错的词没有看完，再试一次。");
+    }
+    const next = typeof data.text === "string" ? data.text : "";
+    return { text: keepHearing(heard, next) };
   },
 
   async correct(sessionId: string, messageId: string) {

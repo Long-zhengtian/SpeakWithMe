@@ -193,6 +193,21 @@ export function chatSystem(scene: SceneSpec, level: LevelSpec, partner?: { perso
   ].join("\n");
 }
 
+export function hearingSystem() {
+  return [
+    "You repair one speech-recognition transcript before it is sent in an English conversation.",
+    'Return JSON only: {"text": ""}.',
+    "Rules:",
+    "- text is the heard sentence with only misheard words replaced.",
+    "- Use the recent turns to decide which word cannot be what the learner was trying to say.",
+    "- Keep every grammar mistake, tense, agreement error, preposition, article, and word order.",
+    "- Do not make the sentence more natural. Do not add or remove ideas.",
+    "- If a change would fix grammar rather than a misheard word, leave that word.",
+    "- If you are not sure, return the heard sentence unchanged.",
+    "- Copy every unchanged word exactly.",
+  ].join("\n");
+}
+
 export function correctionSystem() {
   return [
     "You check one learner sentence for an English speaking practice.",
