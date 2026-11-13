@@ -1,5 +1,9 @@
 # Speak With Me
 
+[![License](https://img.shields.io/github/license/Long-zhengtian/SpeakWithMe)](https://github.com/Long-zhengtian/SpeakWithMe/blob/main/LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Long-zhengtian/SpeakWithMe/pulls)
+[![Powered by React](https://img.shields.io/badge/Powered%20by-React-blue)](https://react.dev)
+
 说一句，改这一句。
 
 给自己练口语。对方只把英语接下去。这句话说完，再单独指出哪里要改。不知道怎么讲，先用中文问一句。模型和语音用你自己的密钥，练习留在这台设备上。
