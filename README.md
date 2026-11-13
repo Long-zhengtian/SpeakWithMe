@@ -1,6 +1,6 @@
 # Speak With Me
 
-[![License](https://img.shields.io/github/license/Long-zhengtian/SpeakWithMe)](https://github.com/Long-zhengtian/SpeakWithMe/blob/main/LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](https://github.com/Long-zhengtian/SpeakWithMe/blob/main/LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Long-zhengtian/SpeakWithMe/pulls)
 [![Powered by React](https://img.shields.io/badge/Powered%20by-React-blue)](https://react.dev)
 
