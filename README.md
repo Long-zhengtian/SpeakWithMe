@@ -20,7 +20,7 @@
 
 **随机一场**不用写处境。从吃饭、问路、和同事闲聊这类日常里想一场，对话的人随机挑，水平按 B1。最近开过的题目会避开。
 
-<table>
+<table align="center" width="100%">
   <tr>
     <td align="center" width="33%">
       <img src="docs/images/phone-home.png" width="200" height="433" alt="从首页选一场开始" />
