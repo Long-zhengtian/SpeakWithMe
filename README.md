@@ -1,54 +1,72 @@
 # Speak With Me
 
-口语练习的第一版。一场对话里有三个分工：
+给自己练口语的一层练习。聊天把英语接下去，说完再单独改这句，不知道怎么讲时先用中文问一句。练习、词典和笔记留在这台设备上。模型和语音用你自己的密钥。
 
-- **聊天**只把英语对话接下去，不纠错，不切中文。一场不限句数。超过 8 句之后，更早的内容收成一段「已经谈过什么」，最近 8 句原文仍发给模型。
-- **指正**在回复发出之后单独看你刚才那句，把整句里的问题改完。
-- **怎么说**接收你的中文，给你一句能直接说的英语。这句话点一下才会进入对话，聊天角色看不到中文。
+<p align="center">
+  <img src="docs/images/home.png" width="220" alt="首页：选一个场景开始" />
+  <img src="docs/images/talk.png" width="220" alt="对话：说完之后单独指出这句的问题" />
+  <img src="docs/images/notebook.png" width="220" alt="笔记本：原句和改后的句子可以换着看" />
+  <img src="docs/images/hearing.png" width="220" alt="发送前：只改听错的词" />
+</p>
 
-点开头像可以看这句中文。译过一次就留在这句上，下次直接显示。
+<p align="center">
+  首页 · 对话里的指正 · 笔记本 · 发送前改听错的词
+</p>
 
-这是接在语言模型上面的练习层。主页「设置」里填上 API key 之后，对话、指正和怎么说才会开始。没有密钥时不能开场。
+## 为什么分成三件事
 
-## 运行
+一场对话里，三件事不混在同一次回复里。
 
-网页和手机安装包用同一份 `frontend`。练习、评分、词典和备份都在页面里完成，不再依赖 `8000` 端口。
+- **聊天**只把英语接下去。不改语法，不切中文。一场不限句数。超过 8 句之后，更早的内容收成一段「已经谈过什么」，最近 8 句原文仍发给模型。
+- **指正**在你这句话发出去、对方回复之后单独看。原句留在气泡里，改动用划掉再换上的方式标出来，下面有一句中文说明。
+- **怎么说**接收你的中文，给你一句能直接说的英语。点一下才会进入对话。聊天角色看不到这句中文。
+
+点开头像可以看对方这句的中文。译过一次就留在这句上。
+
+## 能做什么
+
+- 从场景开始一场对话，选定水平和对方。首页可以留下常练的场景。
+- 按住说话。松开之后字留在发送前的输入框里，可以改，再决定发不发。接着说时，新的一句接在还没发出去的文字后面。
+- 发送前可以点「改听错的词」。模型按刚才的对话只换它觉得听错的词，语法和语序留着。你点「用这句」才换上。
+- 点句子里的词，用打包在应用里的 ECDICT 词典看释义。这一步不调用模型。
+- 句子和词分开放进笔记本。带过指正的句子可以在「带着错误」和「改后的句子」之间换。
+- DeepSeek 作为对话来源时，设置里能看余额，并手动刷新。其他来源没有这个接口。
+- 换手机或换电脑时，导出一份文件再导入。练习按原来的日期接上。
+
+## 跑起来
+
+需要 Node.js。网页和安卓安装包用同一份 `frontend`。
 
 ```bash
-cd frontend
+git clone https://github.com/Long-zhengtian/SpeakWithMe.git
+cd SpeakWithMe/frontend
 npm install
 npm run dev
 ```
 
-打开 http://localhost:5173 。第一次打开时，如果这台电脑上的旧 Python 服务还在 `8000` 端口，会把已有练习导入到浏览器自己的记录里。之后换设备用「设置」里的备份文件。
+打开 http://localhost:5173 。到「设置」里保存对话用的密钥，并选一个模型。没有密钥时不能开场。
 
-听写和朗读走设置里的语音服务。现在可用的是 Azure：填上密钥和终结点之后，网页和安装包都向这一家请求。对话用的密钥不用改。Mia 用 Jenny，Lina 用 Aria，Sam 用 Guy。
+听写和朗读要另外保存 Azure 的密钥和终结点。Mia 用 Jenny，Lina 用 Aria，Sam 用 Guy。这个区域没有对应嗓音时，会换成同性别的标准英语嗓音。
 
-本地小模型仍留在标签 `speech-local-models`。要回到那一版：
+也可以在 GitHub 上用 Codespaces 打开。云端会装好依赖并打开练习页。密钥只留在那台云端环境里。
 
-```bash
-git checkout speech-local-models
-cd frontend && sh scripts/fetch-local-speech-models.sh
-```
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Long-zhengtian/SpeakWithMe)
 
-权重没有放进 git。这台电脑上如果还留着 `frontend/local-speech-models`，也可以把它拷回 `frontend/public/models`。
+## 密钥
 
-`backend/` 是上一版网页服务。新功能写在 `frontend`。
+对话可以接 OpenAI、Grok、智谱 GLM、DeepSeek，或一个兼容 Chat Completions 的地址。每一家的地址、密钥和模型分开保存。点到另一家只是去看它，保存之后练习才改用那一家。
 
-## 打安卓安装包
+密钥写在这台设备自己的记录里。页面上只显示末尾几位。导出的备份文件里有练习、笔记本和密钥，换设备时要注意这份文件给谁。
 
-网页和手机是同一份界面。Capacitor 只负责安卓外壳：安装包里带上编好的页面、ECDICT 词典和本地记录，打开后直接调用设置里保存的模型地址。它不会去连电脑上的 `127.0.0.1:8000`。
+## 安卓安装包
 
-先装好这两样：
+Capacitor 只做外壳。安装包里有编好的页面和 ECDICT 词典，打开后直接调用设置里保存的模型地址。
 
-- **JDK 21**。Gradle 8.14 只能用到 JDK 24，Android Studio 自带的 Java 25 会报 `Unsupported class file major version 69`。这台电脑上的 JDK 21 在 `~/development/jdk-21.0.13+9/Contents/Home`（Temurin 21.0.13）。
-- **Android SDK**。这台电脑在 `~/Library/Android/sdk`，里面已有 `platforms/android-37.0` 和 `build-tools/36.0.0`。`frontend/android/local.properties` 里的 `sdk.dir` 指向它，这个文件不要提交。
-
-在仓库根目录执行：
+需要 JDK 21 和 Android SDK。Gradle 8 不能用 Java 25。
 
 ```bash
-export JAVA_HOME="$HOME/development/jdk-21.0.13+9/Contents/Home"
-export ANDROID_HOME="$HOME/Library/Android/sdk"
+export JAVA_HOME="你的 JDK 21"
+export ANDROID_HOME="你的 Android SDK"
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
 
 cd frontend
@@ -58,106 +76,29 @@ npx cap sync android
 cd android && ./gradlew assembleDebug --no-daemon
 ```
 
-`npm run build` 会先做类型检查再编出 `frontend/dist`。`npx cap sync android` 把 `dist` 和 `frontend/public/ecdict/*.bin` 复制进 `frontend/android/app/src/main/assets/public`。改过页面或词典之后要重新执行这两步，再编安装包。
+调试包在 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`。当前调试包是 1.8.0。
 
-编好的调试包：
-
-`frontend/android/app/build/outputs/apk/debug/app-debug.apk`
-
-当前调试包是 1.7.3。里面有编好的页面和 `assets/public/ecdict` 词典分片。听写和朗读的模型不在包里，使用时连 Azure。
-
-装到手机上有两种办法：
-
-- 把 `app-debug.apk` 拷到手机，在文件管理器里点开安装。系统如果提示未知来源，允许这一次安装即可。
-- 手机打开开发者选项里的 USB 调试，用数据线连上电脑后执行：
+装到手机上：
 
 ```bash
 adb install -r frontend/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-`-r` 会覆盖已安装的同名调试包，练习记录留在手机上。
+`-r` 会盖过同名调试包，练习记录留在手机上。手机上的记录和电脑浏览器是分开的，换过去之前用「设置 → 换设备」导出。
 
-手机上的记录和电脑浏览器是分开的。换过去之前，在「设置 → 换设备」导出。手机把 `speak-with-me-YYYY-MM-DD.json` 存进「下载」文件夹，并弹出完整路径；电脑则交给浏览器下载，一般也在「下载」文件夹，同样弹出路径。再到另一台设备的同一处导入。文件里有场次、笔记和模型密钥。
+## 仓库里另外两块
 
-## 在 GitHub 里打开
+现在的练习都在 `frontend`。`backend/` 是上一版网页服务，新功能不写在那里。
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Long-zhengtian/SpeakWithMe)
-
-也可以在仓库页面点 **Code**，再点 **Codespaces**。云端会装好依赖，并自动打开练习页和接口。页面出来之后，到「设置」里填上 API key。密钥只留在这台云端环境里，不会写回仓库。个人账号的 Codespaces 有每月免费额度。
-
-后端测试：
+本地小模型留在标签 `speech-local-models`。权重没有放进 git。
 
 ```bash
-cd backend
-source .venv/bin/activate
-pytest
+git checkout speech-local-models
+cd frontend && sh scripts/fetch-local-speech-models.sh
 ```
 
-## 接上模型
-
-打开主页的「设置」，选择 OpenAI、Grok、智谱 GLM、DeepSeek，或填一个兼容地址。贴上那一家的 API key 后，从该地址的 `/models` 读出模型列表，再选一个。每一家的地址、密钥和选过的模型分开保存。改用另一家时，之前那一家还留着，下次点回去再保存就会重新用它。页面之后只显示密钥末尾几位。
-
-开发时也可以在仓库根目录用 `.env` 提供同一把密钥：
-
-```bash
-LLM_PROVIDER=openai_compatible
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=你的密钥
-LLM_MODEL=gpt-4o-mini
-LLM_CORRECTION_MODEL=
-LLM_COACH_MODEL=
-```
-
-`LLM_BASE_URL` 可以换成任何兼容 Chat Completions 的地址。指正和怎么说可以单独指定更便宜的模型，留空则都用 `LLM_MODEL`。
-
-## 扩展点
-
-| 想加什么 | 改哪里 |
-| --- | --- |
-| 新场景 | `backend/app/domain/scenes.py` 的 `SCENES`。目录接口会把它带给前端 |
-| 新水平 | `backend/app/domain/levels.py` |
-| 新的语言模型 | 实现 `complete(system, messages, task, response_format)`，注册到 `backend/app/providers/__init__.py` 的 `LLM_BUILDERS` |
-| 语音识别 | 实现 `backend/app/ports/speech.py` 里的 `SpeechToText`，注册到 `STT_BUILDERS`，设置 `STT_PROVIDER`。路由 `POST /api/v1/speech/transcribe` 不用改 |
-| 语音合成 | 同样实现 `TextToSpeech`，注册到 `TTS_BUILDERS`。路由是 `POST /api/v1/speech/synthesize` |
-| 会话存储 | `REPOSITORY=sqlite` 写到 `backend/data/speaking.sqlite`。测试用内存仓库。要换成别的数据库，实现 `SessionRepository` 并在 `build_repository` 里注册 |
-| 个人主页 | `GET /api/v1/profile` 汇总场次、指正和小结。记录点开后，已结束的只回顾，没结束的可以接着说 |
-| 新角色 | 在 `backend/app/agents/` 增加类，只用 `LLMProvider`，并裁剪它能看到的上下文。再在 `SessionService` 加方法、加一条 `/api/v1` 路由，把名字写进 `AGENT_SLOTS` |
-
-聊天上下文只有英语对白。中文求助留在「怎么说」接口里，不会写进对白。借助说出去的句子会标成 `assisted`，指正不会再改它。各功能实际发给模型的提示词和附带内容见 [docs/prompts.md](docs/prompts.md)。
-
-## 第一版的接口
-
-- `GET /api/v1/health`
-- `GET /api/v1/catalog`
-- `GET /api/v1/profile`
-- `GET /api/v1/settings`
-- `PUT /api/v1/settings`
-- `POST /api/v1/settings/test`
-- `POST /api/v1/sessions`
-- `GET /api/v1/sessions/{id}`
-- `PATCH /api/v1/sessions/{id}`
-- `DELETE /api/v1/sessions/{id}`
-- `POST /api/v1/sessions/{id}/messages`
-- `POST /api/v1/sessions/{id}/messages/{message_id}/correction`
-- `POST /api/v1/sessions/{id}/coach`
-- `POST /api/v1/sessions/{id}/recap`
-- `POST /api/v1/sessions/{id}/fork`
-- `POST /api/v1/glossary`
-- `GET /api/v1/phrases`
-- `POST /api/v1/phrases`
-- `PATCH /api/v1/phrases/{id}`
-- `DELETE /api/v1/phrases/{id}`
-- `POST /api/v1/speech/transcribe`
-- `POST /api/v1/speech/synthesize`
-- `GET /api/v1/backup`
-- `POST /api/v1/backup`
-
-交互文档在 http://localhost:8000/docs 。
+各角色发给模型的提示词写在 `frontend/src/engine/catalog.ts`。
 
 ## 还没做
 
-账号、发音评分，以及真正的语音供应商。点词查的是打包在应用里的 ECDICT 词典，不调用模型。对话里可以按住说话，用的是设备自己的英语识别；对方的话用设备朗读。模型密钥在主页的「设置」里填写，存在这台设备自己的记录里，页面上只显示末尾几位。
-
-换电脑或换手机时，在「设置」里导出一份 `speak-with-me-backup` 文件再导入。同编号的场次和笔记用文件里的版本，文件没提到的留在本机。文件里包含模型密钥。
-
-安卓调试包已经能在本机编出来，练习、词典和备份都在安装包里，不打开电脑上的网页。iOS 还没做。窄屏上「怎么说」是英语输入框旁的按钮，点开后从底部升起一层，用「收起」关掉。查一个词时，这层只用卡片上的「关闭」。
+账号、云同步、发音评分，以及腾讯云和阿里云的语音。iOS 还没做。
