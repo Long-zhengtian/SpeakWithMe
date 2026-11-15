@@ -330,20 +330,19 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
   function beginIntent() {
     if (coachLoading || sendingRef.current || listenerRef.current) return;
     stopSpeaking();
+    const previous = intent.trim();
     setIntentListening(true);
     setError(null);
     setStatus(null);
     const listener = startChineseListener({
-      onText: setIntent,
+      onText: (text) => setIntent(joinSpoken(previous, text)),
       onError: (message) => setError(message),
       onEnd: (text) => {
         listenerRef.current = null;
         setIntentListening(false);
         setStatus(null);
-        if (text) {
-          setIntent(text);
-          setError(null);
-        }
+        setIntent(joinSpoken(previous, text));
+        if (text) setError(null);
       },
     });
     listenerRef.current = listener;
@@ -808,5 +807,6 @@ function joinSpoken(previous: string, next: string) {
   const right = next.trim();
   if (!left) return right;
   if (!right) return left;
-  return `${left} ${right}`;
+  const gap = /[\u3400-\u9fff]$/.test(left) && /^[\u3400-\u9fff]/.test(right) ? "" : " ";
+  return `${left}${gap}${right}`;
 }

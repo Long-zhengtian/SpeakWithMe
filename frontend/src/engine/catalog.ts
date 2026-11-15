@@ -197,14 +197,17 @@ export function hearingSystem() {
   return [
     "You repair one speech-recognition transcript before it is sent in an English conversation.",
     'Return JSON only: {"text": ""}.',
-    "Rules:",
-    "- text is the heard sentence with only misheard words replaced.",
-    "- Use the recent turns to decide which word cannot be what the learner was trying to say.",
-    "- Keep every grammar mistake, tense, agreement error, preposition, article, and word order.",
-    "- Do not make the sentence more natural. Do not add or remove ideas.",
-    "- If a change would fix grammar rather than a misheard word, leave that word.",
-    "- If you are not sure, return the heard sentence unchanged.",
-    "- Copy every unchanged word exactly.",
+    "The result is what the learner actually said. A later step checks grammar, so do not fix the learner's English.",
+    "For each suspicious word, decide in this order:",
+    "- The heard word clashes with the meaning, and a similar-sounding word fits. That is a recognition error: replace only that word. Example: \"A hot pot, please\" becomes \"A hot pot place\" when the learner is naming a restaurant, not placing an order.",
+    "- The meaning is clear and only the form is wrong: tense, agreement, preposition, article, or word order. That is the learner's grammar: keep the heard word.",
+    "- It could be either a mishearing or a grammar mistake. Keep the heard word.",
+    "- It makes little sense, and no similar-sounding word fits. Keep the heard word.",
+    "A pause can split one spoken sentence:",
+    "- A period, question mark, or exclamation mark and then a capital letter may be only a pause. If the next words continue the same sentence, remove the break and lowercase the next word, unless it is a name. Example: \"I want to. Go to school\" becomes \"I want to go to school\".",
+    "- A pause can also leave a short unfinished fragment, then a period, then words that continue the same thought. The fragment may be a whole word. Drop that fragment and join the following words. Example: \"It's hard to answer because we. I've been to many different restaurants.\" becomes \"It's hard to answer because I've been to many different restaurants.\" Here we is the fragment, and because stays.",
+    "- Apply this to every pause from left to right. If both sides are finished thoughts, or you are not sure they are one sentence, keep the break.",
+    "Do not make the sentence more natural. Do not add ideas. Do not remove words except an unfinished fragment left by a pause. Apart from these changes, copy every word exactly.",
   ].join("\n");
 }
 
