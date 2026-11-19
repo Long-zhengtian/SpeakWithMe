@@ -130,7 +130,7 @@ npx cap sync android
 cd android && ./gradlew assembleDebug --no-daemon
 ```
 
-调试包在 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`。当前调试包是 1.8.6。
+调试包在 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`。当前调试包是 1.8.7。
 
 装到手机上：
 

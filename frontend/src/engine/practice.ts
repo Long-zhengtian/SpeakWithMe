@@ -913,27 +913,28 @@ export const localApi = {
     const intent = (intentZh || "").trim();
     if (!intent) fail(422, "empty_intent", "先用中文写下你想说的意思。");
     if (intent.length > MAX_INTENT_CHARS) fail(422, "intent_too_long", "短一点就好，说清你想表达的意思。");
-    const partnerLast = [...session.messages].reverse().find((item) => item.role === "assistant")?.text || "";
+    const recent = session.messages.slice(-CHAT_RECENT_MESSAGES).map((item) => ({ role: item.role, text: item.text }));
     let data: Record<string, unknown> = {};
     try {
       data = await completeJson(
         settings.base_url,
         settings.api_key,
         settings.model,
-        coachSystem(scene, level, await partnerOf(session)),
-        [{ role: "user", content: JSON.stringify({ scene_id: scene.id, level: session.level, partner_last: partnerLast, intent_zh: intent, variant }) }],
+        coachSystem(scene, level),
+        [{ role: "user", content: JSON.stringify({ scene_id: scene.id, level: session.level, recent, intent_zh: intent, variant }) }],
         "coach",
       );
     } catch (error) {
       if (error instanceof EngineError && error.code === "llm_unavailable") fail(502, "llm_unavailable", "这句话暂时没组织好，再试一次。");
       data = {};
     }
-    const sentence = String(data.sentence || "").trim();
-    if (!sentence) fail(502, "coach_empty", "没有得到能说的句子，再试一次。");
+    const translation = coachSentence(String(data.translation || ""), intent);
+    const suggestion = coachSentence(String(data.suggestion || ""), intent) || translation;
+    if (!translation) fail(502, "coach_empty", "没有得到能说的句子，再试一次。");
     return {
-      sentence,
-      simpler: String(data.simpler || "").trim() || sentence,
-      gloss_zh: String(data.gloss_zh || "").trim() || "用这句接上对话。",
+      translation,
+      suggestion,
+      gloss_zh: String(data.gloss_zh || "").trim() || "这句话的意思。",
     };
   },
 
@@ -1313,6 +1314,25 @@ function buildProfile(practiced: StoredSession[], listed: StoredSession[] = prac
     activity,
     progress: progressCalendar(practiced),
   };
+}
+
+function intentIsQuestion(intent: string) {
+  const text = intent.trim();
+  return /[?？]/.test(text) || /[吗呢]$/.test(text) || /^(什么|怎么|哪|谁|几|多少|为什么|是不是|有没有)/.test(text);
+}
+
+function coachSentence(text: string, intent: string) {
+  const parts = text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  if (intentIsQuestion(intent)) return parts[0];
+  const statement = parts.find((part) => !part.includes("?"));
+  if (statement) return statement;
+  return parts[0].replace(/\?+$/, ".");
 }
 
 function recordOf(session: StoredSession) {

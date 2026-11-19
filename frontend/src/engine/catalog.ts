@@ -228,21 +228,23 @@ export function correctionSystem() {
   ].join("\n");
 }
 
-export function coachSystem(scene: SceneSpec, level: LevelSpec, partner?: { personality_zh: string; personality_en: string } | null) {
+export function coachSystem(scene: SceneSpec, level: LevelSpec) {
   return [
-    "The learner does not know how to say something in a live English conversation.",
-    "They will describe the meaning in Chinese.",
-    `Scene: ${scene.goal_en}. You are helping them speak to ${scene.partner_name}, ${scene.partner_role_en}.`,
-    ...personalityLines(partner),
-    `Learner level: ${level.id}. ${level.guide_en}`,
-    'Return JSON only: {"sentence": "", "simpler": "", "gloss_zh": ""}.',
-    "Rules:",
-    "- sentence is natural spoken English that fits the scene and the partner's last line.",
-    "- Keep it to one sentence unless an apology needs two.",
-    "- simpler is a shorter version of the same meaning.",
-    "- gloss_zh is under 20 Chinese characters and only gives the meaning.",
-    "- Do not role-play the partner. Do not explain grammar.",
-    "- If variant is greater than 0, phrase it differently from the most obvious line.",
+    "The learner wants the English for one Chinese meaning before they say it.",
+    "You are not the conversation partner, and this is not your turn to chat.",
+    `Scene: ${scene.goal_en}. They will speak to ${scene.partner_name}, ${scene.partner_role_en}.`,
+    `Learner level: ${level.id}. Use words they can say at this level.`,
+    'Return JSON only: {"translation": "", "suggestion": "", "gloss_zh": ""}.',
+    "translation is the first line. It is a direct English translation of intent_zh and nothing else.",
+    "suggestion is the second line. Using intent_zh and the recent messages, write one spoken line that fits this scene.",
+    "The suggestion may sound more natural than the translation. It must still say what they meant.",
+    "Each field is one sentence. Do not write a second sentence in either field.",
+    "Do not add a question, a tag question, or anything that invites a reply.",
+    "A question mark is allowed only when intent_zh itself is a question.",
+    "Do not add a fact, a reason, or a greeting they did not write.",
+    "Do not role-play the partner. Do not explain grammar.",
+    "gloss_zh is under 20 Chinese characters and only restates the meaning. It is not a question.",
+    "If variant is greater than 0, keep the same direct translation and phrase the suggestion differently.",
   ].join("\n");
 }
 

@@ -627,40 +627,41 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
             </div>
             {coachLine ? (
               <div className="coach-result">
-                <p className="coach-kicker">可以说</p>
-                <p data-testid="coach-sentence">{coachLine.sentence}</p>
+                <p className="coach-kicker">原话</p>
+                <p data-testid="coach-translation">{coachLine.translation}</p>
                 <div className="line-actions">
-                  <HearButton text={coachLine.sentence} speakKey={`coach:${coachLine.sentence}`} />
+                  <HearButton text={coachLine.translation} speakKey={`coach:${coachLine.translation}`} />
+                  <button
+                    type="button"
+                    className="ghost slim"
+                    data-testid="coach-send-translation"
+                    disabled={sending}
+                    onClick={() => void useLine(coachLine.translation)}
+                  >
+                    {sendingLine === coachLine.translation ? "发出去了…" : "就说这句"}
+                  </button>
+                </div>
+                <p className="coach-kicker">推荐</p>
+                <p data-testid="coach-suggestion">{coachLine.suggestion}</p>
+                <div className="line-actions">
+                  <HearButton text={coachLine.suggestion} speakKey={`coach-suggestion:${coachLine.suggestion}`} />
                   <button
                     type="button"
                     className="primary slim"
                     data-testid="coach-send"
                     disabled={sending}
-                    onClick={() => void useLine(coachLine.sentence)}
+                    onClick={() => void useLine(coachLine.suggestion)}
                   >
-                    {sendingLine === coachLine.sentence ? "发出去了…" : "就说这句"}
-                  </button>
-                </div>
-                <p className="coach-kicker">更简单</p>
-                <p>{coachLine.simpler}</p>
-                <div className="line-actions">
-                  <HearButton text={coachLine.simpler} speakKey={`coach-simple:${coachLine.simpler}`} />
-                  <button
-                    type="button"
-                    className="ghost slim"
-                    disabled={sending}
-                    onClick={() => void useLine(coachLine.simpler)}
-                  >
-                    用这句
+                    {sendingLine === coachLine.suggestion ? "发出去了…" : "用这句"}
                   </button>
                 </div>
                 <p className="gloss">{coachLine.gloss_zh}</p>
                 <button
                   type="button"
                   className="text-button"
-                  onClick={() => void keep(coachLine.sentence, coachLine.gloss_zh, "sentence")}
+                  onClick={() => void keep(coachLine.suggestion, coachLine.gloss_zh, "sentence")}
                 >
-                  {savedKey === `sentence:${coachLine.sentence}` ? "已收下" : "收下这句"}
+                  {savedKey === `sentence:${coachLine.suggestion}` ? "已收下" : "收下这句"}
                 </button>
                 <button
                   type="button"

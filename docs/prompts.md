@@ -113,38 +113,39 @@ Rules:
 
 ## 怎么说
 
-你在侧栏写下中文意思并点「告诉我怎么说」时调用。换一种说法会把 `variant` 加一。system 带场景目标、对方身份、难度编号和难度句子：
+你在侧栏写下中文意思并点「告诉我怎么说」时调用。换一种说法会把 `variant` 加一，只改推荐说法，直译保持原意。system 带场景目标和对方身份，不带「再问一句」的难度说明，也不带对方爱追问的性格：
 
 ```text
-The learner does not know how to say something in a live English conversation.
-They will describe the meaning in Chinese.
-Scene: Help the learner say one thing they did on the weekend and answer a follow-up. You are helping them speak to Lina, a friend you meet on Monday.
-Personality, in the learner's Chinese: 随意、爱追问，像朋友闲聊。
-Follow that personality.
-Learner level: A1. Use very common words. Use one short sentence. Ask one question the learner can answer in a few words.
-Return JSON only: {"sentence": "", "simpler": "", "gloss_zh": ""}.
-Rules:
-- sentence is natural spoken English that fits the scene and the partner's last line.
-- Keep it to one sentence unless an apology needs two.
-- simpler is a shorter version of the same meaning.
-- gloss_zh is under 20 Chinese characters and only gives the meaning.
-- Do not role-play the partner. Do not explain grammar.
-- If variant is greater than 0, phrase it differently from the most obvious line.
+The learner wants the English for one Chinese meaning before they say it.
+You are not the conversation partner, and this is not your turn to chat.
+Scene: Help the learner say one thing they did on the weekend and answer a follow-up. They will speak to Lina, a friend you meet on Monday.
+Learner level: A1. Use words they can say at this level.
+Return JSON only: {"translation": "", "suggestion": "", "gloss_zh": ""}.
+translation is the first line. It is a direct English translation of intent_zh and nothing else.
+suggestion is the second line. Using intent_zh and the recent messages, write one spoken line that fits this scene.
+The suggestion may sound more natural than the translation. It must still say what they meant.
+Each field is one sentence. Do not write a second sentence in either field.
+Do not add a question, a tag question, or anything that invites a reply.
+A question mark is allowed only when intent_zh itself is a question.
+Do not add a fact, a reason, or a greeting they did not write.
+Do not role-play the partner. Do not explain grammar.
+gloss_zh is under 20 Chinese characters and only restates the meaning. It is not a question.
+If variant is greater than 0, keep the same direct translation and phrase the suggestion differently.
 ```
 
-用户消息只有这一条 JSON，不带整段对话：
+用户消息带最近 8 条对话，供第二句参考：
 
 ```json
 {
   "scene_id": "weekend",
   "level": "A1",
-  "partner_last": "对方上一句英语",
+  "recent": [{ "role": "assistant", "text": "对方上一句英语" }],
   "intent_zh": "你写的中文意思",
   "variant": 0
 }
 ```
 
-`partner_last` 是记录里最近一条对方的话。返回的 `sentence` 先停在侧栏。你点发送之后，它才作为你的一句英语进入对话，并标成 assisted。
+侧栏先显示 `translation`（原话），再显示 `suggestion`（推荐）。你点发送之后，选中的那句才作为你的一句英语进入对话，并标成 assisted。收到的结果如果多写了一句问话，界面只留下陈述句。
 
 ## 小结
 

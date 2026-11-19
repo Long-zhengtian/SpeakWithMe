@@ -93,8 +93,8 @@ export type Session = {
 };
 
 export type CoachLine = {
-  sentence: string;
-  simpler: string;
+  translation: string;
+  suggestion: string;
   gloss_zh: string;
 };
 
