@@ -500,7 +500,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
               {message.correction ? (
                 <aside className="correction" data-testid="correction-card">
                   <span>{categoryLabel(message.correction.category)}</span>
-                  <CorrectionLine original={message.correction.original_span} suggestion={message.correction.suggestion} />
+                  <CorrectionLine original={message.correction.original_span} suggestion={message.correction.suggestion} onWord={lookup} />
                   <p className="correction-why">{message.correction.explanation_zh}</p>
                   <button
                     type="button"
@@ -693,7 +693,7 @@ export function ConversationScreen({ session, onExit, exitLabel = "回到主页"
                 {hearingNote ? <p className="hearing-note">{hearingNote}</p> : null}
                 {hearing ? (
                   <div className="hearing-offer" data-testid="hearing-offer">
-                    <CorrectionLine original={draft} suggestion={hearing} />
+                    <CorrectionLine original={draft} suggestion={hearing} onWord={lookup} />
                     <div className="hearing-actions">
                       <button
                         type="button"

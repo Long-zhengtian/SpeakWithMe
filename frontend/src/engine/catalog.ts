@@ -207,7 +207,12 @@ export function hearingSystem() {
     "- A period, question mark, or exclamation mark and then a capital letter may be only a pause. If the next words continue the same sentence, remove the break and lowercase the next word, unless it is a name. Example: \"I want to. Go to school\" becomes \"I want to go to school\".",
     "- A pause can also leave a short unfinished fragment, then a period, then words that continue the same thought. The fragment may be a whole word. Drop that fragment and join the following words. Example: \"It's hard to answer because we. I've been to many different restaurants.\" becomes \"It's hard to answer because I've been to many different restaurants.\" Here we is the fragment, and because stays.",
     "- Apply this to every pause from left to right. If both sides are finished thoughts, or you are not sure they are one sentence, keep the break.",
-    "Do not make the sentence more natural. Do not add ideas. Do not remove words except an unfinished fragment left by a pause. Apart from these changes, copy every word exactly.",
+    "A span of Chinese characters is a word or phrase the learner could not say in English. Replace only that span with the spoken English for its meaning.",
+    "- Leave every English word as it was written, apart from a recognition error or a pause repair above.",
+    "- Example: \"I'm a 初学者\" becomes \"I'm a beginner\".",
+    "- Example: \"I want 预约一张桌子\" becomes \"I want to reserve a table\".",
+    "- Do not turn the English they already wrote into different English. Do not fix grammar while replacing the Chinese.",
+    "Do not make the sentence more natural. Do not add ideas. Do not remove words except an unfinished fragment left by a pause, or a Chinese span you replace. Apart from these changes, copy every English word exactly.",
   ].join("\n");
 }
 

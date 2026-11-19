@@ -130,7 +130,7 @@ npx cap sync android
 cd android && ./gradlew assembleDebug --no-daemon
 ```
 
-调试包在 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`。当前调试包是 1.8.7。
+调试包在 `frontend/android/app/build/outputs/apk/debug/app-debug.apk`。当前调试包是 1.8.9。
 
 装到手机上：
 
@@ -165,3 +165,4 @@ cd frontend && sh scripts/fetch-local-speech-models.sh
 - [ ] 发音评分
 - [ ] 腾讯云和阿里云的语音
 - [ ] iOS
+- [ ] 按住说话改用 Azure 多语言实时转写，让一句里的中文以汉字回来，而不是拼音。需要 Speech SDK 1.50 或更新。语音资源要在支持这项的区域：东南亚、美国东部、美国西部、美国西部 2、北欧、印度中部。现在的资源在东亚，没有这项。在这之前，中英夹着说用输入法或其他方式写进句子，「改听错的词」把其中的中文换成英语。

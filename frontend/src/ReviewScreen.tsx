@@ -161,7 +161,7 @@ export function ReviewScreen({
               {message.correction ? (
                 <aside className="correction">
                   <span>{categoryLabel(message.correction.category)}</span>
-                  <CorrectionLine original={message.correction.original_span} suggestion={message.correction.suggestion} />
+                  <CorrectionLine original={message.correction.original_span} suggestion={message.correction.suggestion} onWord={(word) => void lookup(word)} />
                   <p className="correction-why">{message.correction.explanation_zh}</p>
                 </aside>
               ) : null}
